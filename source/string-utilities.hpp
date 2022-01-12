@@ -16,6 +16,13 @@
 namespace str //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 {
 
+//---------------------------------------------------------------------------
+std::string replace_extension( const std::string& pth, std::string_view newext ) noexcept
+{
+    const std::string::size_type i_extpos = pth.rfind('.'); // std::string::npos
+    return pth.substr(0,i_extpos).append(newext);
+}
+
 
 //---------------------------------------------------------------------------
 // Change string to lowercase

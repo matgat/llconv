@@ -44,12 +44,6 @@
 namespace sys //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 {
 
-//---------------------------------------------------------------------------
-std::string replace_extension( const std::string& pth, std::string_view newext ) noexcept
-{
-    const std::string::size_type i_extpos = pth.rfind('.'); // std::string::npos
-    return pth.substr(0,i_extpos).append(newext);
-}
 
 
 //---------------------------------------------------------------------------
@@ -240,17 +234,17 @@ class MemoryMappedFile //////////////////////////////////////////////////////
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Write efficiently to file
+// (Over)Write a file
 class file_write
 {
  public:
     explicit file_write(const std::string& pth)
        {
       #ifdef MS_WINDOWS
-        errno_t err = fopen_s(&i_File, pth.c_str(), "wb");
+        const errno_t err = fopen_s(&i_File, pth.c_str(), "wb"); // "a" for append
         if(err) throw std::runtime_error("Cannot write to: " + pth);
       #else
-        i_File = fopen(pth.c_str(), "wb");
+        i_File = fopen(pth.c_str(), "wb"); // "a" for append
         if(!i_File) throw std::runtime_error("Cannot write to: " + pth);
       #endif
        }

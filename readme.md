@@ -5,7 +5,7 @@ This is a conversion utility between these formats:
 * `*.pll` (LogicLab3 library file)
 * `*.plclib` (LogicLab5 library file)
 
-The supported tranformations are:
+The supported transformations are:
 * `*.h` -> `*.pll`
 * `*.pll` -> `*.plclib`
 
@@ -15,6 +15,7 @@ Input files must:
 * Be encoded in ANSI or UTF-8
 * Have strictly unix line breaks (`\n`)
 * Descriptions in `{DE: ...}` cannot contain special characters and line breaks
+
 
 ## Usage
 To print some info:
@@ -35,6 +36,7 @@ $ llconv -fussy -schemaver 2.8 *.pll -output LogicLab/generated-libs
 In case of mixed input files (`*.h` and `*.pll`), the `*.h` files
 will be converted first, and the resulting `*.pll` will be added
 to the others in input.
+
 
 ## Build
 ```
