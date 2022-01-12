@@ -41,4 +41,5 @@ to the others in input.
 ## Build
 ```
 $ git clone https://github.com/matgat/llconv.git
+$ g++ -std=c++2b -O3 -o "llconv" "llconv.cpp"
 ```
