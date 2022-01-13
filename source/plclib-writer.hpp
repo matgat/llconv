@@ -1,7 +1,7 @@
 #ifndef plclib_writer_hpp
 #define plclib_writer_hpp
 /*  ---------------------------------------------
-    ©2021 matteo.gattanini@gmail.com
+    ©2021-2022 matteo.gattanini@gmail.com
 
     OVERVIEW
     ---------------------------------------------
@@ -9,16 +9,21 @@
 
     DEPENDENCIES:
     --------------------------------------------- */
-    #include "plc-elements.hpp" // plcb::*
-    #include "system.hpp"
-    #include "logging.hpp" // fmt::format
-    #include <string>
-    #include <string_view>
-    #include "string-utilities.hpp" // str::to_int, str::hash
-    #include <cstdint> // uint16_t, uint32_t
-    #include <limits> // std::numeric_limits
-    #include <cctype> // std::isdigit
-    //#include <type_traits> // std::enable_if, std::is_unsigned
+#include <string>
+#include <string_view>
+#include <cstdint> // uint16_t, uint32_t
+#include <limits> // std::numeric_limits
+#include <cctype> // std::isdigit
+//#include <type_traits> // std::enable_if, std::is_unsigned
+#include <stdexcept> // std::exception, std::runtime_error, ...
+#include <fmt/core.h> // fmt::format
+
+#include "string-utilities.hpp" // str::to_int, str::hash
+#include "keyvals.hpp" // str::keyvals
+#include "plc-elements.hpp" // plcb::*
+#include "system.hpp" // sys::*, fs::*
+
+using namespace std::string_view_literals; // Use "..."sv
 
 
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -51,7 +56,7 @@ class Version
            }
         catch(std::exception& e)
            {
-            throw dlg::error("\"{}\" is not a valid version: {}", s, e.what());
+            throw std::runtime_error( fmt::format("\"{}\" is not a valid version: {}"sv, s, e.what()) );
            }
        }
 
@@ -225,9 +230,16 @@ inline void write(const sys::file_write& f, const plcb::Macro& macro, const std:
 
 //---------------------------------------------------------------------------
 // Write library to plclib file
-void write(const sys::file_write& f, const plcb::Library& lib, const Version schema_ver)
+void write(const sys::file_write& f, const plcb::Library& lib, const str::keyvals& options)
 {
-    using namespace std::string_view_literals; // Use "..."sv
+    // . Check options
+    // Get possible schema version
+    Version schema_ver;
+    auto schema_ver_str = options.value_of("schema-ver");
+    if( schema_ver_str.has_value() )
+       {
+        schema_ver = schema_ver_str.value();
+       }
 
     // [Heading]
     f << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n"sv
@@ -516,9 +528,6 @@ void write(const sys::file_write& f, const plcb::Library& lib, const Version sch
 //---------------------------------------------------------------------------
 //void list(const sys::file_write& f, const plcb::Library& lib, const int ver)
 //{
-//    using namespace std::string_view_literals; // Use "..."sv
-//    //using namespace std::literals::string_view_literals; // Use "..."sv
-//
 //    f << "\nglobal vars:\n"sv;
 //    for( const auto& group : lib.global_variables().groups() )
 //       {

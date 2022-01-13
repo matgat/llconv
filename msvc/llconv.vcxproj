@@ -95,6 +95,7 @@
     <ClCompile Include="..\source\llconv.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\source\keyvals.hpp" />
     <ClInclude Include="..\source\logging.hpp" />
     <ClInclude Include="..\source\plc-elements.hpp" />
     <ClInclude Include="..\source\plclib-writer.hpp" />

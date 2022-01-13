@@ -9,13 +9,14 @@
 
     DEPENDENCIES:
     --------------------------------------------- */
-    #include "logging.hpp" // 'dlg::error'
-    #include <string>
-    #include <string_view>
-    #include <vector>
-    #include <algorithm> // 'std::sort'
-    //#include <cstdint> // 'uint32_t'
-    #include <ctime> // 'std::time_t'
+#include <string>
+#include <string_view>
+#include <vector>
+#include <algorithm> // 'std::sort'
+//#include <cstdint> // 'uint32_t'
+#include <ctime> // 'std::time_t'
+#include <stdexcept> // std::runtime_error
+#include <fmt/core.h> // fmt::format
 
 
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -35,7 +36,7 @@ class Directive /////////////////////////////////////////////////////////////
     std::string_view key() const noexcept { return i_Key; }
     void set_key(const std::string_view s)
        {
-        if(s.empty()) throw dlg::error("Empty directive key");
+        if(s.empty()) throw std::runtime_error("Empty directive key");
         i_Key = s;
        }
 
@@ -63,28 +64,28 @@ class Variable //////////////////////////////////////////////////////////////
             std::string_view type() const noexcept { return i_Type; }
             void set_type(const std::string_view s)
                {
-                if(s.empty()) throw dlg::error("Empty address type");
+                if(s.empty()) throw std::runtime_error("Empty address type");
                 i_Type = s;
                }
 
             std::string_view typevar() const noexcept { return i_TypeVar; }
             void set_typevar(const std::string_view s)
                {
-                if(s.empty()) throw dlg::error("Empty address var type");
+                if(s.empty()) throw std::runtime_error("Empty address var type");
                 i_TypeVar = s;
                }
 
             std::string_view index() const noexcept { return i_Index; }
             void set_index(const std::string_view s)
                {
-                if(s.empty()) throw dlg::error("Empty address index");
+                if(s.empty()) throw std::runtime_error("Empty address index");
                 i_Index = s;
                }
 
             std::string_view subindex() const noexcept { return i_SubIndex; }
             void set_subindex(const std::string_view s)
                {
-                if(s.empty()) throw dlg::error("Empty address subindex");
+                if(s.empty()) throw std::runtime_error("Empty address subindex");
                 i_SubIndex = s;
                }
 
@@ -95,7 +96,7 @@ class Variable //////////////////////////////////////////////////////////////
     std::string_view name() const noexcept { return i_Name; }
     void set_name(const std::string_view s)
        {
-        if(s.empty()) throw dlg::error("Empty variable name");
+        if(s.empty()) throw std::runtime_error("Empty variable name");
         i_Name = s;
        }
 
@@ -106,7 +107,7 @@ class Variable //////////////////////////////////////////////////////////////
     std::string_view type() const noexcept { return i_Type; }
     void set_type(const std::string_view s)
        {
-        if(s.empty()) throw dlg::error("Empty variable type");
+        if(s.empty()) throw std::runtime_error("Empty variable type");
         i_Type = s;
        }
 
@@ -121,7 +122,7 @@ class Variable //////////////////////////////////////////////////////////////
     std::string_view value() const noexcept { return i_Value; }
     void set_value(const std::string_view s)
        {
-        if(s.empty()) throw dlg::error("Empty variable initialization value");
+        if(s.empty()) throw std::runtime_error("Empty variable initialization value");
         i_Value = s;
        }
     bool has_value() const noexcept { return !i_Value.empty(); }
@@ -208,7 +209,7 @@ class Struct ////////////////////////////////////////////////////////////////
     std::string_view name() const noexcept { return i_Name; }
     void set_name(const std::string_view s)
        {
-        if(s.empty()) throw dlg::error("Empty struct name");
+        if(s.empty()) throw std::runtime_error("Empty struct name");
         i_Name = s;
        }
 
@@ -238,22 +239,22 @@ class TypeDef ///////////////////////////////////////////////////////////////
                                             i_ArrayDim(var.arraydim()),
                                             i_Descr(var.descr())
        {
-        if( var.has_value() ) throw dlg::error("Typedef \"{}\" cannot have a value ({})", var.name(), var.value());
-        if( var.has_address() ) throw dlg::error("Typedef \"{}\" cannot have an address", var.name());
+        if( var.has_value() ) throw std::runtime_error(fmt::format("Typedef \"{}\" cannot have a value ({})", var.name(), var.value()));
+        if( var.has_address() ) throw std::runtime_error(fmt::format("Typedef \"{}\" cannot have an address", var.name()));
         //if(i_Length>0) --i_Length; // WTF Ad un certo punto Axel ha deciso che nei typedef la dimensione è meno uno??
        }
 
     std::string_view name() const noexcept { return i_Name; }
     //void set_name(const std::string_view s)
     //   {
-    //    if(s.empty()) throw dlg::error("Empty typedef name");
+    //    if(s.empty()) throw std::runtime_error("Empty typedef name");
     //    i_Name = s;
     //   }
 
     std::string_view type() const noexcept { return i_Type; }
     //void set_type(const std::string_view s)
     //   {
-    //    if(s.empty()) throw dlg::error("Empty typedef type");
+    //    if(s.empty()) throw std::runtime_error("Empty typedef type");
     //    i_Type = s;
     //   }
 
@@ -289,14 +290,14 @@ class Enum //////////////////////////////////////////////////////////////////
             std::string_view name() const noexcept { return i_Name; }
             void set_name(const std::string_view s)
                 {
-                 if(s.empty()) throw dlg::error("Empty enum constant name");
+                 if(s.empty()) throw std::runtime_error("Empty enum constant name");
                  i_Name = s;
                 }
 
             std::string_view value() const noexcept { return i_Value; }
             void set_value(const std::string_view s)
                 {
-                 if(s.empty()) throw dlg::error("Enum constant {} must have a value",name());
+                 if(s.empty()) throw std::runtime_error(fmt::format("Enum constant {} must have a value",name()));
                  i_Value = s;
                 }
 
@@ -313,7 +314,7 @@ class Enum //////////////////////////////////////////////////////////////////
     std::string_view name() const noexcept { return i_Name; }
     void set_name(const std::string_view s)
        {
-        if(s.empty()) throw dlg::error("Empty enum name");
+        if(s.empty()) throw std::runtime_error("Empty enum name");
         i_Name = s;
        }
 
@@ -339,14 +340,14 @@ class Subrange //////////////////////////////////////////////////////////////
     std::string_view name() const noexcept { return i_Name; }
     void set_name(const std::string_view s)
        {
-        if(s.empty()) throw dlg::error("Empty subrange name");
+        if(s.empty()) throw std::runtime_error("Empty subrange name");
         i_Name = s;
        }
 
     std::string_view type() const noexcept { return i_Type; }
     void set_type(const std::string_view s)
        {
-        if(s.empty()) throw dlg::error("Empty subrange type");
+        if(s.empty()) throw std::runtime_error("Empty subrange type");
         i_Type = s;
        }
 
@@ -354,7 +355,7 @@ class Subrange //////////////////////////////////////////////////////////////
     double max_value() const noexcept { return i_MaxVal; }
     void set_range(const double min_val, const double max_val)
        {
-        if( max_val < min_val ) throw dlg::error("Invalid range {}..{} of subrange \"{}\"", min_val, max_val, name());
+        if( max_val < min_val ) throw std::runtime_error(fmt::format("Invalid range {}..{} of subrange \"{}\"", min_val, max_val, name()));
         i_MinVal = min_val;
         i_MaxVal = max_val;
        }
@@ -381,7 +382,7 @@ class Pou ///////////////////////////////////////////////////////////////////
     std::string_view name() const noexcept { return i_Name; }
     void set_name(const std::string_view s)
        {
-        if(s.empty()) throw dlg::error("Empty POU name");
+        if(s.empty()) throw std::runtime_error("Empty POU name");
         i_Name = s;
        }
 
@@ -458,7 +459,7 @@ class Macro /////////////////////////////////////////////////////////////////
             std::string_view name() const noexcept { return i_Name; }
             void set_name(const std::string_view s)
                {
-                if(s.empty()) throw dlg::error("Empty parameter name");
+                if(s.empty()) throw std::runtime_error("Empty parameter name");
                 i_Name = s;
                }
 
@@ -474,7 +475,7 @@ class Macro /////////////////////////////////////////////////////////////////
     std::string_view name() const noexcept { return i_Name; }
     void set_name(const std::string_view s)
        {
-        if(s.empty()) throw dlg::error("Empty macro name");
+        if(s.empty()) throw std::runtime_error("Empty macro name");
         i_Name = s;
        }
 
@@ -573,27 +574,27 @@ class Library ///////////////////////////////////////////////////////////////
            {
             for( const auto& cvar : consts_grp.variables() )
                {
-                if( !cvar.has_value() ) throw dlg::error("Global constant \"{}\" has no value",cvar.name());
+                if( !cvar.has_value() ) throw std::runtime_error(fmt::format("Global constant \"{}\" has no value",cvar.name()));
                }
            }
 
         // Functions must have a return type and cannot have certain variables type
         for( const auto& funct : functions() )
            {
-            if( !funct.has_return_type() ) throw dlg::error("Function \"{}\" has no return type",funct.name());
-            if( !funct.output_vars().empty() ) throw dlg::error("Function \"{}\" cannot have output variables",funct.name());
-            if( !funct.inout_vars().empty() ) throw dlg::error("Function \"{}\" cannot have in-out variables",funct.name());
-            if( !funct.external_vars().empty() ) throw dlg::error("Function \"{}\" cannot have external variables",funct.name());
+            if( !funct.has_return_type() ) throw std::runtime_error(fmt::format("Function \"{}\" has no return type",funct.name()));
+            if( !funct.output_vars().empty() ) throw std::runtime_error(fmt::format("Function \"{}\" cannot have output variables",funct.name()));
+            if( !funct.inout_vars().empty() ) throw std::runtime_error(fmt::format("Function \"{}\" cannot have in-out variables",funct.name()));
+            if( !funct.external_vars().empty() ) throw std::runtime_error(fmt::format("Function \"{}\" cannot have external variables",funct.name()));
            }
 
         // Programs cannot have a return type and cannot have certain variables type
         for( const auto& prog : programs() )
            {
-            if( prog.has_return_type() ) throw dlg::error("Program \"{}\" cannot have a return type",prog.name());
-            if( !prog.input_vars().empty() ) throw dlg::error("Program \"{}\" cannot have input variables",prog.name());
-            if( !prog.output_vars().empty() ) throw dlg::error("Program \"{}\" cannot have output variables",prog.name());
-            if( !prog.inout_vars().empty() ) throw dlg::error("Program \"{}\" cannot have in-out variables",prog.name());
-            if( !prog.external_vars().empty() ) throw dlg::error("Program \"{}\" cannot have external variables",prog.name());
+            if( prog.has_return_type() ) throw std::runtime_error(fmt::format("Program \"{}\" cannot have a return type",prog.name()));
+            if( !prog.input_vars().empty() ) throw std::runtime_error(fmt::format("Program \"{}\" cannot have input variables",prog.name()));
+            if( !prog.output_vars().empty() ) throw std::runtime_error(fmt::format("Program \"{}\" cannot have output variables",prog.name()));
+            if( !prog.inout_vars().empty() ) throw std::runtime_error(fmt::format("Program \"{}\" cannot have in-out variables",prog.name()));
+            if( !prog.external_vars().empty() ) throw std::runtime_error(fmt::format("Program \"{}\" cannot have external variables",prog.name()));
            }
        }
 

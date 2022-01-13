@@ -10,12 +10,14 @@
 
     DEPENDENCIES:
     --------------------------------------------- */
-    #include <string_view>
-    #include <stdexcept> // std::exception, std::runtime_error, ...
-    #include <cctype> // std::isdigit, std::isblank, ...
-    #include "string-utilities.hpp" // str::escape
-    //#include "plc-elements.hpp" // plcb::*
-    #include "logging.hpp" // dlg::parse_error, dlg::error, DBGLOG, fmt::format
+#include <cctype> // std::isdigit, std::isblank, ...
+#include <string_view>
+#include <stdexcept> // std::exception, std::runtime_error, ...
+#include <fmt/core.h> // fmt::format
+
+#include "string-utilities.hpp" // str::escape
+//#include "plc-elements.hpp" // plcb::*
+#include "logging.hpp" // dlg::parse_error, dlg::error, DBGLOG
 
 using namespace std::literals; // Use "..."sv
 
@@ -87,17 +89,17 @@ void parse(const std::string_view buf, plc::Library& lib, std::vector<std::strin
     std::size_t i = 0; // Current character
 
     //---------------------------------
-    auto notify_error = [&](const std::string_view msg, auto... args)
-       {
-        if(fussy)
-           {
-            throw dlg::error(msg, args...);
-           }
-        else
-           {
-            issues.push_back( fmt::format("{} (line {}, offset {})", fmt::format(msg, args...), line, i) );
-           }
-       };
+    //auto notify_error = [&](const std::string_view msg, auto... args)
+    //   {
+    //    if(fussy) throw std::runtime_error( fmt::format(fmt::runtime(msg), args...) );
+    //    else issues.push_back( fmt::format("{} (line {}, offset {})", fmt::format(fmt::runtime(msg), args...), line, i) );
+    //   };
+    // Ehmm, with a lambda I cannot use consteval format
+    #define notify_error(...) \
+       {\
+        if(fussy) throw std::runtime_error( fmt::format(__VA_ARGS__) );\
+        else issues.push_back( fmt::format("{} (line {}, offset {})"sv, fmt::format(__VA_ARGS__), line, i) );\
+       }
 
     //---------------------------------
     auto is_blank = [](const char c) noexcept -> bool
@@ -317,6 +319,7 @@ void parse(const std::string_view buf, plc::Library& lib, std::vector<std::strin
             // SW_VER             : LREAL := 23.90; { DE:"Versione delle definizioni" }
            }
        }
+    #undef notify_error
 }
 
 

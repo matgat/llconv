@@ -9,14 +9,16 @@
 
     DEPENDENCIES:
     --------------------------------------------- */
-    #include <string_view>
-    #include <stdexcept> // std::exception, std::runtime_error, ...
-    #include <cctype> // std::isdigit, std::isblank, ...
-    #include <cmath> // std::pow, ...
-    //#include <limits> // std::numeric_limits
-    #include "string-utilities.hpp" // str::escape
-    #include "plc-elements.hpp" // plcb::*
-    #include "logging.hpp" // dlg::parse_error, dlg::error, DBGLOG, fmt::format
+#include <cctype> // std::isdigit, std::isblank, ...
+#include <cmath> // std::pow, ...
+#include <string_view>
+//#include <limits> // std::numeric_limits
+#include <stdexcept> // std::exception, std::runtime_error, ...
+#include <fmt/core.h> // fmt::format
+
+#include "string-utilities.hpp" // str::escape
+#include "plc-elements.hpp" // plcb::*
+#include "logging.hpp" // dlg::parse_error, dlg::error, DBGLOG
 
 using namespace std::literals; // Use "..."sv
 
@@ -57,20 +59,20 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
     //if(buf.find('\r') != buf.npos) throw std::runtime_error("EOL is not unix, remove CR (\\r) character");
 
     std::size_t line = 1; // Current line number
-    std::size_t i = 0; // Current character
+    std::size_t i = 0; // Current character index
 
     //---------------------------------
-    auto notify_error = [&](const std::string_view msg, auto... args)
-       {
-        if(fussy)
-           {
-            throw dlg::error(msg, args...);
-           }
-        else
-           {
-            issues.push_back( fmt::format("{} (line {}, offset {})", fmt::format(msg, args...), line, i) );
-           }
-       };
+    //auto notify_error = [&](const std::string_view msg, auto... args)
+    //   {
+    //    if(fussy) throw std::runtime_error( fmt::format(fmt::runtime(msg), args...) );
+    //    else issues.push_back( fmt::format("{} (line {}, offset {})", fmt::format(fmt::runtime(msg), args...), line, i) );
+    //   };
+    // Ehmm, with a lambda I cannot use consteval format
+    #define notify_error(...) \
+       {\
+        if(fussy) throw std::runtime_error( fmt::format(__VA_ARGS__) );\
+        else issues.push_back( fmt::format("{} (line {}, offset {})"sv, fmt::format(__VA_ARGS__), line, i) );\
+       }
 
     //---------------------------------
     auto is_blank = [](const char c) noexcept -> bool
@@ -1247,6 +1249,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
        {
         throw dlg::parse_error(e.what(), line, i);
        }
+    #undef notify_error
 }
 
 

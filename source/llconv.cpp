@@ -13,12 +13,15 @@
 #include <string_view>
 #include <vector>
 #include <stdexcept> // std::runtime_error
+#include <fmt/core.h> // fmt::format
+
 #include "system.hpp" // sys::*, fs::*
 #include "string-utilities.hpp" // str::tolower
-#include "logging.hpp" // dlg::error
+#include "keyvals.hpp" // str::keyvals
+#include "logging.hpp" // dlg::parse_error
 //#include "h-parser.hpp" // h::*
-#include "plc-elements.hpp" // plcb::*
 #include "pll-parser.hpp" // pll::*
+#include "plc-elements.hpp" // plcb::*
 #include "plclib-writer.hpp" // plclib::*
 
 using namespace std::literals; // Use "..."sv
@@ -37,7 +40,7 @@ class Arguments
             enum class STS
                {
                 SEE_ARG,
-                GET_VER,
+                GET_OPTS,
                 GET_OUT
                } status = STS::SEE_ARG;
 
@@ -61,9 +64,9 @@ class Arguments
                                {
                                 i_sort = true;
                                }
-                            else if( arg=="-schemaver"sv )
+                            else if( arg=="-options"sv )
                                {
-                                status = STS::GET_VER; // Value expected
+                                status = STS::GET_OPTS; // Value expected
                                }
                             else if( arg=="-output"sv )
                                {
@@ -88,8 +91,8 @@ class Arguments
                            }
                         break;
 
-                    case STS::GET_VER :
-                        i_schemaver = arg; // Expecting something like "2.8"
+                    case STS::GET_OPTS :
+                        i_options.assign(arg); // Expecting something like "key1:val1,key2,key3:val3"
                         status = STS::SEE_ARG;
                         break;
 
@@ -123,19 +126,22 @@ class Arguments
                      "    \"*.plclib\" LogicLab5 library file\n"
                      "The supported transformations are:\n"
                      "    \"*.h\" -> \"*.pll\"\n"
-                     "    \"*.pll\" -> \"*.plclib\"\n\n";
+                     "    \"*.pll\" -> \"*.plclib\"\n"
+                     "\n";
        }
 
     static void print_usage() noexcept
        {
         std::cerr << "\nUsage:\n"
-                     "   llconv -fussy -verbose -schemaver 2.8 path/to/*.pll -output path/\n"
-                     "       -fussy: Handle issues as blocking errors\n"
-                     "       -output <path>: Set output directory or file (combining input files)\n"
-                     "       -schemaver <num>: LogicLab plclib schema version\n"
-                     "       -sort: Order objects by name\n"
-                     "       -verbose: Print more info on stdout\n"
-                     "       -help: Just print help info and abort\n\n";
+                     "   llconv -fussy -verbose -options schemaver:2.8 path/to/*.pll -output path/\n"
+                     "       -fussy (Handle issues as blocking errors)\n"
+                     "       -help (Just print help info and abort)\n"
+                     "       -options (LogicLab plclib schema version)\n"
+                     "            schema-ver:<num> (Indicate a schema version for LogicLab plclib output)\n"
+                     "       -output <path> (Set output directory or file)\n"
+                     "       -sort (Order objects by name)\n"
+                     "       -verbose (Print more info on stdout)\n"
+                     "\n";
        }
 
     const auto& files() const noexcept { return i_files; }
@@ -143,7 +149,7 @@ class Arguments
     bool fussy() const noexcept { return i_fussy; }
     bool sort() const noexcept { return i_sort; }
     bool verbose() const noexcept { return i_verbose; }
-    plclib::Version schema_ver() const noexcept { return i_schemaver; }
+    const str::keyvals& options() const noexcept { return i_options; }
 
  private:
     std::vector<fs::path> i_files;
@@ -151,7 +157,7 @@ class Arguments
     bool i_fussy = false;
     bool i_sort = false;
     bool i_verbose = false;
-    plclib::Version i_schemaver; // LogicLab plclib schema version
+    str::keyvals i_options; // Conversion and writing options
 };
 
 
@@ -234,11 +240,11 @@ inline void convert_pll(const fs::path& pth, const Arguments& args, std::vector<
         const std::string out_path{ opth.string() };
         if(args.verbose())  std::cout << "    " "Writing to: "  << out_path << '\n';
         sys::file_write out_file_write( out_path );
-        plclib::write(out_file_write, lib, args.schema_ver());
+        plclib::write(out_file_write, lib, args.options());
        }
     else
        {// Combine in a single 'plcprj' file
-        throw dlg::error("[!] Combine into existing plcprj file {} not yet supported", args.output().string());
+        throw std::runtime_error(fmt::format("[!] Combine into existing plcprj file {} not yet supported", args.output().string()));
        }
 
     //return out_path;
@@ -261,11 +267,17 @@ int main( int argc, const char* argv[] )
            }
 
         std::vector<std::string> issues;
-        auto notify_error = [&args,&issues](const std::string_view msg, auto... vals)
-           {
-            if(args.fussy()) throw std::runtime_error( fmt::format(msg, vals...) );
-            else issues.push_back( fmt::format(msg, vals...) );
-           };
+        //auto notify_error = [&args,&issues](const std::string_view msg, auto&&... vals)
+        //   {
+        //    if(args.fussy()) throw std::runtime_error( fmt::format(msg, std::forward<auto>(vals)) );
+        //    else issues.push_back( fmt::format(msg, vals...) );
+        //   };
+        // Ehmm, with a lambda I cannot use consteval format
+        #define notify_error(...) \
+           {\
+            if(args.fussy()) throw std::runtime_error( fmt::format(__VA_ARGS__) );\
+            else issues.push_back( fmt::format(__VA_ARGS__) );\
+           }
 
         // Check input files, divide them in h and pll
         if( args.files().empty() )
@@ -289,7 +301,7 @@ int main( int argc, const char* argv[] )
                }
             else
                {
-                notify_error("[!] Unhandled extension {} of {}", ext, pth.filename().string());
+                notify_error("[!] Unhandled extension {} of {}"sv, ext, pth.filename().string());
                }
            }
 

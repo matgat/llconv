@@ -9,11 +9,21 @@
 
     DEPENDENCIES:
     --------------------------------------------- */
-    //#include <format> // c++20 formatting library
-    #include <fmt/core.h>
-    #include <fmt/color.h>
-    #include <string>
-    //#include <iostream>
+//#include <format> // c++20 formatting library
+#include <fmt/core.h> // fmt::format
+#include <fmt/color.h>
+#include <string>
+#include <string_view>
+//#include <iostream>
+
+
+  // Debug facility
+  #ifdef _DEBUG
+    #define DBGLOG(...) fmt::print(fg(fmt::color::aquamarine) | fmt::emphasis::italic, __VA_ARGS__);
+  #else
+    #define DBGLOG(...)
+  #endif
+
 
 
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -21,10 +31,11 @@ namespace dlg //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 {
     
 //---------------------------------------------------------------------------
-template<typename ...Args> void print(Args&&... args)
-   {
-    fmt::print(fg(fmt::color::aquamarine) | fmt::emphasis::italic, std::forward<Args>(args)...);
-   }
+//template<typename ...Args> void print(Args&&... args)
+//   {
+//    fmt::print(fg(fmt::color::aquamarine) | fmt::emphasis::italic, std::forward<Args>(args)...);
+//   }
+
 
 //---------------------------------------------------------------------------
 //template<typename ...Args> std::string format(Args&&... args)
@@ -32,12 +43,14 @@ template<typename ...Args> void print(Args&&... args)
 //    return fmt::format(std::forward<Args>(args)...);
 //   }
 
+
 /////////////////////////////////////////////////////////////////////////////
 class error : public std::exception
 {
  public:
-    template <class ... Args> explicit error(const std::string_view txt, Args... args)
-       : i_msg(fmt::format(txt, args...)) {}
+    template<class ... Args> explicit error(const std::string_view txt, Args&&... args)
+       : i_msg(fmt::format(fmt::runtime(txt), std::forward<Args>(args)...)) {}
+
     const char* what() const noexcept override { return i_msg.c_str(); } // Will probably rise a '-Wweak-vtables'
 
  private:
@@ -64,14 +77,6 @@ class parse_error : public std::exception
 
 
 }//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-
-
-// Debug facility
-#ifdef _DEBUG
-    #define DBGLOG(...) dlg::print(__VA_ARGS__);
-#else
-    #define DBGLOG(...)
-#endif
 
 
 

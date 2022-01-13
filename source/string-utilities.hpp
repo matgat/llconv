@@ -5,11 +5,13 @@
 
     DEPENDENCIES:
     --------------------------------------------- */
-    #include <cctype> // std::isdigit, std::tolower, ...
-    #include <string_view>
-    //#include <optional>
-    #include <charconv> // std::from_chars
-    #include "logging.hpp" // dlg::error
+#include <cctype> // std::isdigit, std::tolower, ...
+#include <string>
+#include <string_view>
+#include <charconv> // std::from_chars
+#include <fmt/core.h> // fmt::format
+
+using namespace std::literals; // Use "..."sv
 
 
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -116,7 +118,7 @@ int to_int(const std::string_view s)
     int result;
     auto [p, ec] = std::from_chars(s.data(), s.data()+s.size(), result);
     //if(ec == std::errc::runtime_error || ec == std::errc::result_out_of_range)
-    if( ec != std::errc() || p!=(s.data()+s.size()) ) throw dlg::error("\"{}\" is not a valid integer",s);
+    if( ec != std::errc() || p!=(s.data()+s.size()) ) throw std::runtime_error(fmt::format("\"{}\" is not a valid integer",s));
     return result;
 }
 
@@ -128,7 +130,7 @@ int to_int(const std::string_view s)
 //    double result;
 //    auto [p, ec] = std::from_chars(s.data(), s.data()+s.size(), result);
 //    //if(ec == std::errc::runtime_error || ec == std::errc::result_out_of_range)
-//    if( ec != std::errc() || p!=(s.data()+s.size()) ) throw dlg::error("\"{}\" is not a valid double",s);
+//    if( ec != std::errc() || p!=(s.data()+s.size()) ) throw std::runtime_error(fmt::format("\"{}\" is not a valid double",s));
 //    return result;
 //}
 
@@ -161,105 +163,94 @@ std::size_t hash(const std::string_view s)
 // Natural sorting compare functor
 // std::map<std::string,std::string,NatSortLess> map;
 // std::sort(vector, NatSortLess cmp);
-class NatSortLess ///////////////////////////////////////////////////////////
-{
- public:
-    bool operator()(const char* const a, const char* const b) const { return natcmp(a, b) < 0; }
-    bool operator()(const std::string& a, const std::string& b) const { return natcmp(a.c_str(), b.c_str()) < 0; }
-    //bool operator()(const std::string_view a, const std::string_view b) const { return natcmp(a, b) < 0; }
-
- private:
-    //-----------------------------------------------------------------------
-    // Natural compare function
-    static int natcmp(const char* const a, const char* const b, const bool no_case =true)
-       {
-        int ia=0, ib=0;
-        while(true)
-           {
-            // Skip leading spaces
-            while(std::isspace(a[ia])) ++ia;
-            while(std::isspace(b[ib])) ++ib;
-
-            char ca = a[ia];
-            char cb = b[ib];
-
-            if( std::isdigit(ca) && std::isdigit(cb) )
-               {// Compare numbers
-                int result = (ca=='0' || cb=='0') ? cmp_left(a+ia, b+ib) : cmp_right(a+ia, b+ib);
-                if(result!=0) return result;
-               }
-
-            // If both terminated, have the same order
-            if(!ca && !cb) return 0; // could call 'std::strcmp' for further check
-
-            if(no_case)
-               {
-                ca = static_cast<char>(std::toupper(ca));
-                cb = static_cast<char>(std::toupper(cb));
-               }
-
-            // Check sorting
-            if(ca<cb) return -1;
-            else if(ca>cb) return +1;
-
-            // Next chars
-            if(ca) ++ia;
-            if(cb) ++ib;
-           }
-       }
-
-    //-----------------------------------------------------------------------
-    // The longest run of digits wins.
-    // That aside, the greatest value wins, but we can't know that it will
-    // until we've scanned both numbers to know that they have the
-    // same magnitude, so we remember it in BIAS.
-    static inline int cmp_right(const char* a, const char* b)
-       {
-        int bias = 0;
-        while(true)
-           {
-            if(std::isdigit(*a)) { if(!std::isdigit(*b)) return +1; }
-            else return std::isdigit(*b) ? -1 : bias;
-
-            // If here the strings are both digits, so not yet terminated
-            if(*a<*b) { if(!bias) bias = -1; }
-            else if(*a>*b) { if(!bias) bias = +1; }
-            //else if(!*a && !*b) return bias; // this should never be true
-            ++a, ++b;
-           }
-       }
-
-    //-----------------------------------------------------------------------
-    // Compare two left-aligned numbers: the first to have a different value wins
-    static inline int cmp_left(const char* a, const char* b)
-       {
-        while(true)
-           {
-            if(std::isdigit(*a)) { if(!std::isdigit(*b)) return +1; }
-            else return std::isdigit(*b) ? -1 : 0;
-
-            // If here the strings are both digits, so not yet terminated
-            if(*a<*b) return -1;
-            else if(*a>*b) return +1;
-            ++a, ++b;
-           }
-       }
-};
-
-
-
-
-
-//template<class Int> constexpr typename std::enable_if<std::is_unsigned<Int>::value, Int>::type make_mask(const unsigned char pattern)
-//   {
-//    return ((std::numeric_limits<Int>::max() / std::numeric_limits<unsigned char>::max()) * pattern);
-//   }
-
-//---------------------------------------------------------------------------
-//consteval std::string indent(const std::size_t n)
+//class NatSortLess ///////////////////////////////////////////////////////////
 //{
-//    return std::string(n, "\t");
-//}
+// public:
+//    bool operator()(const char* const a, const char* const b) const { return natcmp(a, b) < 0; }
+//    bool operator()(const std::string& a, const std::string& b) const { return natcmp(a.c_str(), b.c_str()) < 0; }
+//    //bool operator()(const std::string_view a, const std::string_view b) const { return natcmp(a, b) < 0; }
+//
+// private:
+//    //-----------------------------------------------------------------------
+//    // Natural compare function
+//    static int natcmp(const char* const a, const char* const b, const bool no_case =true)
+//       {
+//        int ia=0, ib=0;
+//        while(true)
+//           {
+//            // Skip leading spaces
+//            while(std::isspace(a[ia])) ++ia;
+//            while(std::isspace(b[ib])) ++ib;
+//
+//            char ca = a[ia];
+//            char cb = b[ib];
+//
+//            if( std::isdigit(ca) && std::isdigit(cb) )
+//               {// Compare numbers
+//                int result = (ca=='0' || cb=='0') ? cmp_left(a+ia, b+ib) : cmp_right(a+ia, b+ib);
+//                if(result!=0) return result;
+//               }
+//
+//            // If both terminated, have the same order
+//            if(!ca && !cb) return 0; // could call 'std::strcmp' for further check
+//
+//            if(no_case)
+//               {
+//                ca = static_cast<char>(std::toupper(ca));
+//                cb = static_cast<char>(std::toupper(cb));
+//               }
+//
+//            // Check sorting
+//            if(ca<cb) return -1;
+//            else if(ca>cb) return +1;
+//
+//            // Next chars
+//            if(ca) ++ia;
+//            if(cb) ++ib;
+//           }
+//       }
+//
+//    //-----------------------------------------------------------------------
+//    // The longest run of digits wins.
+//    // That aside, the greatest value wins, but we can't know that it will
+//    // until we've scanned both numbers to know that they have the
+//    // same magnitude, so we remember it in BIAS.
+//    static inline int cmp_right(const char* a, const char* b)
+//       {
+//        int bias = 0;
+//        while(true)
+//           {
+//            if(std::isdigit(*a)) { if(!std::isdigit(*b)) return +1; }
+//            else return std::isdigit(*b) ? -1 : bias;
+//
+//            // If here the strings are both digits, so not yet terminated
+//            if(*a<*b) { if(!bias) bias = -1; }
+//            else if(*a>*b) { if(!bias) bias = +1; }
+//            //else if(!*a && !*b) return bias; // this should never be true
+//            ++a, ++b;
+//           }
+//       }
+//
+//    //-----------------------------------------------------------------------
+//    // Compare two left-aligned numbers: the first to have a different value wins
+//    static inline int cmp_left(const char* a, const char* b)
+//       {
+//        while(true)
+//           {
+//            if(std::isdigit(*a)) { if(!std::isdigit(*b)) return +1; }
+//            else return std::isdigit(*b) ? -1 : 0;
+//
+//            // If here the strings are both digits, so not yet terminated
+//            if(*a<*b) return -1;
+//            else if(*a>*b) return +1;
+//            ++a, ++b;
+//           }
+//       }
+//};
+
+
+
+
 
 
 
@@ -281,6 +272,18 @@ class NatSortLess ///////////////////////////////////////////////////////////
 //    constinit char* const ptr;
 //    constinit std::size_t len;
 //};
+
+//template<class Int> constexpr typename std::enable_if<std::is_unsigned<Int>::value, Int>::type make_mask(const unsigned char pattern)
+//   {
+//    return ((std::numeric_limits<Int>::max() / std::numeric_limits<unsigned char>::max()) * pattern);
+//   }
+
+//---------------------------------------------------------------------------
+//consteval std::string indent(const std::size_t n)
+//{
+//    return std::string(n, "\t");
+//}
+
 
 
 }//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
