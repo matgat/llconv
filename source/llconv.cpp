@@ -19,10 +19,11 @@
 #include "string-utilities.hpp" // str::tolower
 #include "keyvals.hpp" // str::keyvals
 #include "logging.hpp" // dlg::parse_error
-//#include "h-parser.hpp" // h::*
+#include "h-parser.hpp" // h::*
 #include "pll-parser.hpp" // pll::*
 #include "plc-elements.hpp" // plcb::*
-#include "plclib-writer.hpp" // plclib::*
+#include "plclib-writer.hpp" // plclib::write
+#include "pll-writer.hpp" // pll::write
 
 using namespace std::literals; // Use "..."sv
 
@@ -103,7 +104,8 @@ class Arguments
                             throw std::invalid_argument(fmt::format("Output path doesn't exists: {}",arg));
                             //const bool ok = fs::create_directories(i_output);
                            }
-                        if( !fs::is_directory(i_output) )
+                        i_output_isdir = fs::is_directory(i_output);
+                        if( !i_output_isdir )
                            {
                             throw std::invalid_argument(fmt::format("Combine into existing output file not yet supported: {}",arg));
                            }
@@ -124,8 +126,10 @@ class Arguments
                      "    \"*.h\" Sipro #defines file\n"
                      "    \"*.pll\" LogicLab3 library file\n"
                      "    \"*.plclib\" LogicLab5 library file\n"
+                     "Sipro *.h files resemble a c-like header with #define directives.\n"
+                     "LogicLab files are xml containers of IEC 61131-3 ST code.\n"
                      "The supported transformations are:\n"
-                     "    \"*.h\" -> \"*.pll\"\n"
+                     "    \"*.h\" -> \"*.pll\", \"*.plclib\"\n"
                      "    \"*.pll\" -> \"*.plclib\"\n"
                      "\n";
        }
@@ -146,6 +150,7 @@ class Arguments
 
     const auto& files() const noexcept { return i_files; }
     const auto& output() const noexcept { return i_output; }
+    bool output_isdir() const noexcept { return i_output_isdir; }
     bool fussy() const noexcept { return i_fussy; }
     bool sort() const noexcept { return i_sort; }
     bool verbose() const noexcept { return i_verbose; }
@@ -154,6 +159,7 @@ class Arguments
  private:
     std::vector<fs::path> i_files;
     fs::path i_output = ".";
+    bool i_output_isdir = false; // Cached result
     bool i_fussy = false;
     bool i_sort = false;
     bool i_verbose = false;
@@ -161,28 +167,20 @@ class Arguments
 };
 
 
-//---------------------------------------------------------------------------
-// Perform the h -> pll conversion of a file
-inline std::string convert_h(const fs::path& pth, const Arguments& args, std::vector<std::string>& issues)
-{
-    std::string out_path;
-    return out_path;
-}
 
 
 //---------------------------------------------------------------------------
-// Perform the pll -> plclib conversion of a file
-inline void convert_pll(const fs::path& pth, const Arguments& args, std::vector<std::string>& issues)
+// Import a file
+template<typename F> void import_file(F parsefunct, const fs::path& pth, plcb::Library& lib, const Arguments& args, std::vector<std::string>& issues)
 {
-    //std::string out_path;
-    const std::string pll_path{pth.string()};
+    const std::string in_path{pth.string()};
 
-    sys::MemoryMappedFile in_file_buf(pll_path); // Do not deallocate until the end!
+    sys::MemoryMappedFile in_file_buf(in_path); // Do not deallocate until the end!
 
     // Show file name and size
     if( args.verbose() )
        {
-        std::cout << "Processing " << pll_path;
+        std::cout << "Processing " << in_path;
         std::cout << " (size: ";
         if(in_file_buf.size()>1048576) std::cout << in_file_buf.size()/1048576 << "MB)\n";
         else if(in_file_buf.size()>1024) std::cout << in_file_buf.size()/1024 << "KB)\n";
@@ -190,14 +188,13 @@ inline void convert_pll(const fs::path& pth, const Arguments& args, std::vector<
        }
 
     // Parse
-    plcb::Library lib( pth.stem().string() );
     std::vector<std::string> parse_issues;
     try{
-        pll::parse(in_file_buf.as_string_view(), lib, parse_issues, args.fussy());
+        parsefunct(in_file_buf.as_string_view(), lib, parse_issues, args.fussy());
        }
     catch( dlg::parse_error& e)
        {
-        sys::edit_text_file( pll_path, e.pos() );
+        sys::edit_text_file( in_path, e.pos() );
         throw;
        }
     if(args.verbose()) std::cout << "    " << lib.to_str() << '\n';
@@ -206,13 +203,13 @@ inline void convert_pll(const fs::path& pth, const Arguments& args, std::vector<
     if( !parse_issues.empty() )
        {
         // Append to overall issues list
-        issues.push_back( fmt::format("____Parsing of {}",pll_path) );
+        issues.push_back( fmt::format("____Parsing of {}",in_path) );
         issues.insert(issues.end(), parse_issues.begin(), parse_issues.end());
         // Log in a file
-        const std::string log_file_path{ str::replace_extension(pll_path, ".log") };
+        const std::string log_file_path{ str::replace_extension(in_path, ".log") };
         sys::file_write log_file_write( log_file_path );
         log_file_write << sys::human_readable_time_stamp() << '\n';
-        log_file_write << "[Parse log of "sv << pll_path << "]\n"sv;
+        log_file_write << "[Parse log of "sv << in_path << "]\n"sv;
         for(const std::string& issue : parse_issues)
            {
             log_file_write << "[!] "sv << issue << '\n';
@@ -228,28 +225,46 @@ inline void convert_pll(const fs::path& pth, const Arguments& args, std::vector<
         lib.sort();
        }
 
-    //auto [ctime, mtime] = sys::get_file_dates(pll_path);
+    //auto [ctime, mtime] = sys::get_file_dates(in_path);
     //std::cout << "pll created:" << sys::human_readable_time_stamp(ctime) << " modified:" << sys::human_readable_time_stamp(mtime) << '\n';
     //lib.set_dates(ctime, mtime);
-
-    // Write the output
-    if( fs::is_directory( args.output() ) )
-       {
-        // Create a 'plclib' file in the output directory
-        const fs::path opth{ args.output() / str::replace_extension(pth.filename().string(), ".plclib") };
-        const std::string out_path{ opth.string() };
-        if(args.verbose())  std::cout << "    " "Writing to: "  << out_path << '\n';
-        sys::file_write out_file_write( out_path );
-        plclib::write(out_file_write, lib, args.options());
-       }
-    else
-       {// Combine in a single 'plcprj' file
-        throw std::runtime_error(fmt::format("[!] Combine into existing plcprj file {} not yet supported", args.output().string()));
-       }
-
-    //return out_path;
 }
 
+//---------------------------------------------------------------------------
+// Write PLC library to plclib format
+inline void write_plclib(const plcb::Library& lib, const fs::path& inpth, const Arguments& args)
+{
+    //if( args.output_isdir() )
+    //   {// Create a 'plclib' file in the output directory
+        const fs::path opth{ args.output() / str::replace_extension(inpth.filename().string(), ".plclib") };
+        const std::string out_path{ opth.string() };
+        if(args.verbose()) std::cout << "    " "Writing to: "  << out_path << '\n';
+        sys::file_write out_file_write( out_path );
+        plclib::write(out_file_write, lib, args.options());
+    //   }
+    //else
+    //   {// Combine in a single 'plcprj' file
+    //    throw std::runtime_error(fmt::format("Combine into existing plcprj file {} not yet supported", args.output().string()));
+    //   }
+}
+
+//---------------------------------------------------------------------------
+// Write PLC library to pll format
+inline void write_pll(const plcb::Library& lib, const fs::path& inpth, const Arguments& args)
+{
+    //if( args.output_isdir() )
+    //   {// Create a 'plclib' file in the output directory
+        const fs::path opth{ args.output() / str::replace_extension(inpth.filename().string(), ".pll") };
+        const std::string out_path{ opth.string() };
+        if(args.verbose()) std::cout << "    " "Writing to: "  << out_path << '\n';
+        sys::file_write out_file_write( out_path );
+        pll::write(out_file_write, lib, args.options());
+    //   }
+    //else
+    //   {// Combine in a single 'pll' file
+    //    throw std::runtime_error(fmt::format("Combine into existing pll file {} not yet supported", args.output().string()));
+    //   }
+}
 
 
 //---------------------------------------------------------------------------
@@ -259,24 +274,12 @@ int main( int argc, const char* argv[] )
 
     try{
         Arguments args(argc, argv);
+        std::vector<std::string> issues;
 
         if( args.verbose() )
            {
             std::cout << "**** llconv (" << __DATE__ << ") ****\n"; // sys::human_readable_time_stamp()
             std::cout << "Running in: " << fs::current_path().string() << '\n';
-           }
-
-        std::vector<std::string> issues;
-        //auto notify_error = [&args,&issues](const std::string_view msg, auto&&... vals)
-        //   {
-        //    if(args.fussy()) throw std::runtime_error( fmt::format(msg, std::forward<auto>(vals)) );
-        //    else issues.push_back( fmt::format(msg, vals...) );
-        //   };
-        // Ehmm, with a lambda I cannot use consteval format
-        #define notify_error(...) \
-           {\
-            if(args.fussy()) throw std::runtime_error( fmt::format(__VA_ARGS__) );\
-            else issues.push_back( fmt::format(__VA_ARGS__) );\
            }
 
         // Check input files, divide them in h and pll
@@ -301,25 +304,27 @@ int main( int argc, const char* argv[] )
                }
             else
                {
-                notify_error("[!] Unhandled extension {} of {}"sv, ext, pth.filename().string());
+                const std::string msg = fmt::format("Unhandled extension {} of {}"sv, ext, pth.filename().string());
+                if(args.fussy()) throw std::runtime_error(msg);
+                else issues.push_back(msg);
                }
            }
 
-        // h -> pll conversion
-        if( h_files.size()>0 )
+        // h -> pll,plclib
+        for( const auto& pth : h_files )
            {
-            pll_files.reserve( pll_files.size() + h_files.size() );
-            for( const auto& pth : h_files )
-               {
-                // I'll convert to 'plclib' also this new 'pll' created from 'h'
-                pll_files.push_back( convert_h(pth, args, issues) );
-               }
+            plcb::Library lib( pth.stem().string() );
+            import_file(h::parse, pth, lib, args, issues);
+            write_pll(lib, pth, args);
+            write_plclib(lib, pth, args);
            }
 
-        // pll -> plclib conversion
+        // pll -> plclib
         for( const auto& pth : pll_files )
            {
-            convert_pll(pth, args, issues);
+            plcb::Library lib( pth.stem().string() );
+            import_file(pll::parse, pth, lib, args, issues);
+            write_plclib(lib, pth, args);
            }
 
         if( issues.size()>0 )

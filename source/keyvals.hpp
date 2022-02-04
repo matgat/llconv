@@ -103,19 +103,17 @@ class keyvals
        }
 
     //-----------------------------------------------------------------------
-    std::optional<string_type> value_of(const string_type& key) const noexcept
+    std::optional<std::string_view> value_of(const string_type& key) const noexcept
        {
-        std::optional<string_type> val;
-        const const_iterator i = i_map.find(key);
-        if( i!=i_map.end() ) val = i->second;
+        std::optional<std::string_view> val;
+        if( const const_iterator i=i_map.find(key); i!=i_map.end() ) val = std::string_view(i->second);
         return val;
        }
 
     //-----------------------------------------------------------------------
     //const string_type& value_of(const string_type& key, const string_type& def_val) const noexcept
     //   {
-    //    const const_iterator i = i_map.find(key);
-    //    if( i!=i_map.end() ) return i->second;
+    //    if( const const_iterator i=i_map.find(key); i!=i_map.end() ) return i->second;
     //    return def_val;
     //   }
 
@@ -130,6 +128,23 @@ class keyvals
     container_type i_map;
 };
 
+
+//---------------------------------------------------------------------------
+//void test()
+//{
+//    str::keyvals options;
+//    options.assign("key1:val1,key2,key3,key4:val4"sv);
+//    assert( !options.is_empty() );
+//    assert( options.contains("key1") );
+//    assert( options.contains("key2") );
+//    assert( options.contains("key3") );
+//    assert( options.contains("key4") );
+//    assert( !options.contains("key5") );
+//    assert( options.value_of("key1").has_value() );
+//    assert( options.value_of("key1").value()=="val1"s );
+//    assert( !options.value_of("key2").has_value() );
+//    assert( options.to_str()=="key1:val1,key2,key3,key4:val4" );
+//}
 
 
 }//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::

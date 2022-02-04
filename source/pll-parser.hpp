@@ -578,9 +578,8 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             if( i>=siz || buf[i]!='%' ) throw dlg::error("Expected \'%\' in variable \"{}\" address", var.name());
             ++i; // Skip '%'
             // Here expecting something like: MB300.6000
-            //std::size_t i_start = i;
-            var.address().set_type( std::string_view(buf.data()+i, 1) ); i+=1;
-            var.address().set_typevar( std::string_view(buf.data()+i, 1) ); i+=1;
+            var.address().set_type( buf[i] ); i+=1; // In the Sipro/LogicLab world the address type is always 'M'
+            var.address().set_typevar( buf[i] ); i+=1;
             var.address().set_index( collect_digits() );
             if( i>=siz || buf[i]!='.' ) throw dlg::error("Expected \'.\' in variable \"{}\" address", var.name());
             ++i; // Skip '.'

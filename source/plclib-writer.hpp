@@ -18,7 +18,7 @@
 #include <stdexcept> // std::exception, std::runtime_error, ...
 #include <fmt/core.h> // fmt::format
 
-#include "string-utilities.hpp" // str::to_int, str::hash
+#include "string-utilities.hpp" // str::to_num, str::hash
 #include "keyvals.hpp" // str::keyvals
 #include "plc-elements.hpp" // plcb::*
 #include "system.hpp" // sys::*, fs::*
@@ -45,13 +45,13 @@ class Version
             std::size_t i = 0;
             std::size_t i_start = i;
             while( i<siz && std::isdigit(s[i]) ) ++i;
-            uint16_t majv = static_cast<uint16_t>(str::to_int( std::string_view(s.data()+i_start, i-i_start) ));
+            const uint16_t majv = str::to_num<uint16_t>( std::string_view(s.data()+i_start, i-i_start) );
             if( i>=siz || s[i]!='.' ) throw std::runtime_error("Missing \'.\' after major version");
             ++i; // Skip '.'
             i_start = i;
             while( i<siz && std::isdigit(s[i]) ) ++i;
             if( i<siz ) throw std::runtime_error("Unexpected content after minor version");
-            uint16_t minv = static_cast<uint16_t>(str::to_int( std::string_view(s.data()+i_start, i-i_start) ));
+            const uint16_t minv = str::to_num<uint16_t>( std::string_view(s.data()+i_start, i-i_start) );
             set_version(majv, minv);
            }
         catch(std::exception& e)
@@ -109,8 +109,8 @@ inline void write(const sys::file_write& f, const plcb::Variable& var, const std
            {
             f<< ind << "\t<address type=\""sv << var.address().type()
              <<                "\" typeVar=\""sv << var.address().typevar()
-             <<                "\" index=\""sv << var.address().index()
-             <<                "\" subIndex=\""sv << var.address().subindex()
+             <<                "\" index=\""sv << std::to_string(var.address().index())
+             <<                "\" subIndex=\""sv << std::to_string(var.address().subindex())
              <<                "\"/>\n"sv;
            }
 

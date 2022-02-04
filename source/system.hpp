@@ -326,71 +326,46 @@ std::string human_readable_time_stamp()
 
 //---------------------------------------------------------------------------
 // auto [ctime, mtime] = get_file_dates("/path/to/file");
-std::tuple<std::time_t, std::time_t> get_file_dates(const std::string& spth) noexcept
-{
-    //const std::filesystem::path pth(spth);
-    // Note: in c++20 std::filesystem::file_time_type is guaranteed to be epoch
-    //return {std::filesystem::last_creat?_time(pth), std::filesystem::last_write_time(pth)};
-
-  #ifdef MS_WINDOWS
-    HANDLE h = ::CreateFile(spth.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-    if( h!=INVALID_HANDLE_VALUE )
-       {
-        //BY_HANDLE_FILE_INFORMATION fd{0};
-        //::GetFileInformationByHandle(h, &fd);
-        FILETIME ftCreationTime{0}, ftLastAccessTime{0}, ftLastWriteTime{0};
-        ::GetFileTime(h, &ftCreationTime, &ftLastAccessTime, &ftLastWriteTime);
-        ::CloseHandle(h);
-
-        FILETIME lftCreationTime{0}, lftLastWriteTime{0}; // Local file times
-        ::FileTimeToLocalFileTime(&ftCreationTime, &lftCreationTime);
-        ::FileTimeToLocalFileTime(&ftLastWriteTime, &lftLastWriteTime);
-
-        //auto to_time_t = [](const FILETIME& ft) -> std::time_t
-        //   {
-        //    #include "date.h" // https://github.com/HowardHinnant/date
-        //    ULARGE_INTEGER wt = { ft.dwLowDateTime, ft.dwHighDateTime };
-        //    using wfs = date::duration<ULONGLONG, std::ratio<1, 10'000'000>>;
-        //    std::chrono::system_clock::time_point tp{ date::floor<system_clock::duration>(wfs{wt} - (date::sys_days{1970_y/jan/1} - date::sys_days{1601_y/jan/1})) };
-        //    return epoch_time_stamp(tp);
-        //   };
-
-        //auto to_time_t = [](const FILETIME& ft) -> std::time_t
-        //   {
-        //    SYSTEMTIME st;  ::FileTimeToSystemTime(&lft, &st);
-        //    struct tm tmtime = {0};
-        //    tmtime.tm_year = st.wYear - 1900;
-        //    tmtime.tm_mon = st.wMonth - 1;
-        //    tmtime.tm_mday = st.wDay;
-        //    tmtime.tm_hour = st.wHour;
-        //    tmtime.tm_min = st.wMinute;
-        //    tmtime.tm_sec = st.wSecond;
-        //    tmtime.tm_wday = 0;
-        //    tmtime.tm_yday = 0;
-        //    tmtime.tm_isdst = -1;
-        //    return mktime(&tmtime);
-        //   };
-
-        auto to_time_t = [](const FILETIME& ft) -> std::time_t
-           {
-            // FILETIME is is the number of 100 ns increments since January 1 1601
-            ULARGE_INTEGER wt = { ft.dwLowDateTime, ft.dwHighDateTime };
-            //const ULONGLONG TICKS_PER_SECOND = 10'000'000ULL;
-            //const ULONGLONG EPOCH_DIFFERENCE = 11644473600ULL;
-            return wt.QuadPart / 10000000ULL - 11644473600ULL;
-           };
-
-        return std::make_tuple(to_time_t(lftCreationTime), to_time_t(lftLastWriteTime));
-       }
-  #else
-    struct stat result;
-    if( stat(spth.c_str(), &result )==0 )
-       {
-        return {result.st_ctime, result.st_mtime};
-       }
-  #endif
-  return {0,0};
-}
+//std::tuple<std::time_t, std::time_t> get_file_dates(const std::string& spth) noexcept
+//{
+//    //const std::filesystem::path pth(spth);
+//    // Note: in c++20 std::filesystem::file_time_type is guaranteed to be epoch
+//    //return {std::filesystem::last_creat?_time(pth), std::filesystem::last_write_time(pth)};
+//
+//  #ifdef MS_WINDOWS
+//    HANDLE h = ::CreateFile(spth.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+//    if( h!=INVALID_HANDLE_VALUE )
+//       {
+//        //BY_HANDLE_FILE_INFORMATION fd{0};
+//        //::GetFileInformationByHandle(h, &fd);
+//        FILETIME ftCreationTime{0}, ftLastAccessTime{0}, ftLastWriteTime{0};
+//        ::GetFileTime(h, &ftCreationTime, &ftLastAccessTime, &ftLastWriteTime);
+//        ::CloseHandle(h);
+//
+//        FILETIME lftCreationTime{0}, lftLastWriteTime{0}; // Local file times
+//        ::FileTimeToLocalFileTime(&ftCreationTime, &lftCreationTime);
+//        ::FileTimeToLocalFileTime(&ftLastWriteTime, &lftLastWriteTime);
+//
+//        auto to_time_t = [](const FILETIME& ft) -> std::time_t
+//           {
+//            // FILETIME is is the number of 100 ns increments since January 1 1601
+//            ULARGE_INTEGER wt = { ft.dwLowDateTime, ft.dwHighDateTime };
+//            //const ULONGLONG TICKS_PER_SECOND = 10'000'000ULL;
+//            //const ULONGLONG EPOCH_DIFFERENCE = 11644473600ULL;
+//            return wt.QuadPart / 10000000ULL - 11644473600ULL;
+//           };
+//
+//        return std::make_tuple(to_time_t(lftCreationTime), to_time_t(lftLastWriteTime));
+//       }
+//  #else
+//    struct stat result;
+//    if( stat(spth.c_str(), &result )==0 )
+//       {
+//        return {result.st_ctime, result.st_mtime};
+//       }
+//  #endif
+//  return {0,0};
+//}
 
 
 

@@ -9,9 +9,11 @@
 #include <string>
 #include <string_view>
 #include <charconv> // std::from_chars
+#include <optional> // std::optional
 #include <fmt/core.h> // fmt::format
 
 using namespace std::literals; // Use "..."sv
+
 
 
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -112,38 +114,27 @@ void replace_all(std::string& s, const std::string& from, const std::string& to)
 
 
 //---------------------------------------------------------------------------
-// Convert string_view to int
-int to_int(const std::string_view s)
+// Convert a string_view to number
+template<typename T> T to_num(const std::string_view s)
 {
-    int result;
-    auto [p, ec] = std::from_chars(s.data(), s.data()+s.size(), result);
+    T result;
+    const auto i_end = s.data() + s.size();
+    const auto [i, ec] = std::from_chars(s.data(), i_end, result);
     //if(ec == std::errc::runtime_error || ec == std::errc::result_out_of_range)
-    if( ec != std::errc() || p!=(s.data()+s.size()) ) throw std::runtime_error(fmt::format("\"{}\" is not a valid integer",s));
+    if( ec!=std::errc() || i!=i_end ) throw std::runtime_error(fmt::format("\"{}\" is not a valid number",s));
     return result;
 }
 
-
 //---------------------------------------------------------------------------
-// Convert string_view to double
-//double to_double(const std::string_view s)
-//{
-//    double result;
-//    auto [p, ec] = std::from_chars(s.data(), s.data()+s.size(), result);
-//    //if(ec == std::errc::runtime_error || ec == std::errc::result_out_of_range)
-//    if( ec != std::errc() || p!=(s.data()+s.size()) ) throw std::runtime_error(fmt::format("\"{}\" is not a valid double",s));
-//    return result;
-//}
-
-
-//---------------------------------------------------------------------------
-// Convert string_view to int
-//std::optional<int> to_int(const std::string_view s)
-//   {
-//    int result;
-//    const std::from_chars_result res = std::from_chars(s.data(), s.data() + s.size(), result);
-//    if(res.ec == std::errc()) return result;
-//    return std::nullopt;
-//   }
+// Try to convert a string_view to number
+template<typename T> std::optional<T> as_num(const std::string_view s) noexcept
+   {
+    T result;
+    const auto i_end = s.data() + s.size();
+    const auto [i, ec] = std::from_chars(s.data(), i_end, result);
+    if( ec!=std::errc() || i!=i_end ) return std::nullopt;
+    return result;
+   }
 
 
 //---------------------------------------------------------------------------

@@ -1,27 +1,104 @@
 #ifndef plc_elements_hpp
 #define plc_elements_hpp
 /*  ---------------------------------------------
-    ©2021 matteo.gattanini@gmail.com
+    ©2021-2022 matteo.gattanini@gmail.com
 
     OVERVIEW
     ---------------------------------------------
-    Descriptors of PLC elements
+    IEC 61131-3 stuff and descriptors of PLC elements
 
     DEPENDENCIES:
     --------------------------------------------- */
 #include <string>
 #include <string_view>
+#include <array>
 #include <vector>
-#include <algorithm> // 'std::sort'
-//#include <cstdint> // 'uint32_t'
-#include <ctime> // 'std::time_t'
+#include <algorithm> // std::sort, std::ranges::find
+#include <cstdint> // std::uint16_t
+#include <ctime> // std::time_t
 #include <stdexcept> // std::runtime_error
 #include <fmt/core.h> // fmt::format
+
+#include "string-utilities.hpp" // str::as_num
+
 
 
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 namespace plc //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 {
+
+    //-----------------------------------------------------------------------
+    // Tell if a string is a recognized numerical type
+    constexpr bool is_num_type(const std::string_view s)
+       {
+        // Built in numeric types
+        constexpr std::array<std::string_view,16> num_types =
+           {
+            "BOOL"sv,   // [1] BOOLean [FALSE|TRUE]
+            "SINT"sv,   // [1] Short INTeger [-128 … +127]
+            "INT"sv,    // [2] INTeger [-32768 … +32767]
+            "DINT"sv,   // [4] Double [INTeger -2147483648 … +2147483647]
+            "LINT"sv,   // [8] Long INTeger [-2^63 … +2^63-1]
+            "USINT"sv,  // [1] Unsigned Short INTeger [0 … +255]
+            "UINT"sv,   // [2] Unsigned INTeger [0 … +65535]
+            "UDINT"sv,  // [4] Unsigned Double INTeger [0 … +4294967295]
+            "ULINT"sv,  // [8] Unsigned Long INTeger [0 … +2^64-1]
+            "REAL"sv,   // [4] REAL number [±10^+38]
+            "LREAL"sv,  // [8] Long REAL number [±10^+308]
+            "BOOL"sv,   // [1] 1 bit
+            "BYTE"sv,   // [1] 1 byte
+            "WORD"sv,   // [2] 2 bytes
+            "DWORD"sv,  // [4] 4 bytes
+            "LWORD"sv   // [8] 8 bytes
+           };
+        return std::ranges::find(num_types, s) != num_types.end();
+       }
+
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Variable address ex. MB700.320
+//                      M     B        700  .  320
+//                      ↑     ↑        ↑       ↑
+//                      type  typevar  index   subindex
+class VariableAddress
+{
+ public:
+     VariableAddress(const char typ ='\0', const char vtyp ='\0', const std::uint16_t idx =0, const std::uint16_t sub =0) noexcept
+       : i_Type(typ), i_TypeVar(vtyp), i_Index(idx), i_SubIndex(sub) {}
+
+    bool is_empty() const noexcept { return i_Type=='\0'; }
+
+    char type() const noexcept { return i_Type; }
+    void set_type(const char typ) noexcept { i_Type = typ; }
+
+    char typevar() const noexcept { return i_TypeVar; }
+    void set_typevar(const char vtyp) noexcept { i_TypeVar = vtyp; }
+
+    std::uint16_t index() const noexcept { return i_Index; }
+    void set_index(const std::uint16_t idx) noexcept { i_Index = idx; }
+    void set_index(const std::string_view s)
+       {
+        auto idx = str::as_num<std::uint16_t>(s);
+        if(!idx.has_value()) throw std::runtime_error(fmt::format("Invalid address index \"{}\"", s));
+        i_Index = idx.value();
+       }
+
+    std::uint16_t subindex() const noexcept { return i_SubIndex; }
+    void set_subindex(const std::uint16_t idx) noexcept { i_SubIndex = idx; }
+    void set_subindex(const std::string_view s)
+       {
+        auto idx = str::as_num<std::uint16_t>(s);
+        if(!idx.has_value()) throw std::runtime_error(fmt::format("Invalid address subindex \"{}\"", s));
+        i_SubIndex = idx.value();
+       }
+
+ private:
+    char i_Type; // Typically 'M'
+    char i_TypeVar;
+    std::uint16_t i_Index;
+    std::uint16_t i_SubIndex;
+};
 
 
 namespace buf //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -55,44 +132,6 @@ class Directive /////////////////////////////////////////////////////////////
 class Variable //////////////////////////////////////////////////////////////
 {
  public:
-    /////////////////////////////////////////////////////////////////////////
-    class Address
-       {
-        public:
-            bool is_empty() const noexcept { return i_SubIndex.empty(); }
-
-            std::string_view type() const noexcept { return i_Type; }
-            void set_type(const std::string_view s)
-               {
-                if(s.empty()) throw std::runtime_error("Empty address type");
-                i_Type = s;
-               }
-
-            std::string_view typevar() const noexcept { return i_TypeVar; }
-            void set_typevar(const std::string_view s)
-               {
-                if(s.empty()) throw std::runtime_error("Empty address var type");
-                i_TypeVar = s;
-               }
-
-            std::string_view index() const noexcept { return i_Index; }
-            void set_index(const std::string_view s)
-               {
-                if(s.empty()) throw std::runtime_error("Empty address index");
-                i_Index = s;
-               }
-
-            std::string_view subindex() const noexcept { return i_SubIndex; }
-            void set_subindex(const std::string_view s)
-               {
-                if(s.empty()) throw std::runtime_error("Empty address subindex");
-                i_SubIndex = s;
-               }
-
-        private:
-            std::string_view i_Type, i_TypeVar, i_Index, i_SubIndex;
-       };
-
     std::string_view name() const noexcept { return i_Name; }
     void set_name(const std::string_view s)
        {
@@ -100,8 +139,8 @@ class Variable //////////////////////////////////////////////////////////////
         i_Name = s;
        }
 
-    Address& address() noexcept { return i_Address; }
-    const Address& address() const noexcept { return i_Address; }
+    VariableAddress& address() noexcept { return i_Address; }
+    const VariableAddress& address() const noexcept { return i_Address; }
     bool has_address() const noexcept { return !i_Address.is_empty(); }
 
     std::string_view type() const noexcept { return i_Type; }
@@ -133,7 +172,7 @@ class Variable //////////////////////////////////////////////////////////////
 
  private:
     std::string_view i_Name;
-    Address i_Address;
+    VariableAddress i_Address;
     std::string_view i_Type;
     std::size_t i_Length = 0;
     std::size_t i_ArrayDim = 0;
