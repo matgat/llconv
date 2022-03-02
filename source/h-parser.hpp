@@ -1,5 +1,5 @@
-#ifndef h_parser_hpp
-#define h_parser_hpp
+#ifndef GUARD_h_parser_hpp
+#define GUARD_h_parser_hpp
 /*  ---------------------------------------------
     ©2022 matteo.gattanini@gmail.com
 
@@ -18,10 +18,11 @@
 
 #include "string-utilities.hpp" // str::escape
 #include "plc-elements.hpp" // plc::*, plcb::*
-#include "logging.hpp" // dlg::parse_error, DBGLOG
+#include "format_string.hpp" // fmtstr::parse_error
+#include "debug.hpp" // DBGLOG
 #include "sipro.hpp" // sipro::
 
-using namespace std::literals; // Use "..."sv
+using namespace std::literals; // "..."sv
 
 
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -74,7 +75,7 @@ class RawDefine
 
 //---------------------------------------------------------------------------
 // Parse a generic 'h' file containing a list of c-like preprocessor defines
-std::vector<RawDefine> parse(const std::string_view buf, std::vector<std::string>& issues, const bool fussy)
+std::vector<RawDefine> do_parse(const std::string_view buf, std::vector<std::string>& issues, const bool fussy)
 {
     std::vector<RawDefine> defines;
 
@@ -133,7 +134,7 @@ std::vector<RawDefine> parse(const std::string_view buf, std::vector<std::string
     //---------------------------------
     auto eat_line_end = [&]() noexcept -> bool
        {
-        if( buf[i]=='\n' )
+        if( i<siz && buf[i]=='\n' )
            {
             ++i;
             ++line;
@@ -191,7 +192,7 @@ std::vector<RawDefine> parse(const std::string_view buf, std::vector<std::string
                }
             ++i;
            }
-        throw dlg::parse_error("Unclosed block comment", line_start, i_start);
+        throw fmtstr::parse_error("Unclosed block comment", line_start, i_start);
        };
 
     //---------------------------------
@@ -248,7 +249,7 @@ std::vector<RawDefine> parse(const std::string_view buf, std::vector<std::string
         def.set_value( collect_token() );
         // [Comment]
         skip_blanks();
-        if( eat_line_comment_start() )
+        if( eat_line_comment_start() && i<siz )
            {
             skip_blanks();
             const std::size_t i_start = i; // Start of overall comment string
@@ -256,24 +257,24 @@ std::vector<RawDefine> parse(const std::string_view buf, std::vector<std::string
             // Detect possible pre-declarator in square brackets like: // [xxx] comment
             std::size_t i_pre_start = i; // Start of possible pre-declarator in square brackets
             std::size_t i_pre_len = 0;
-            if( buf[i]=='[' )
+            if( i<siz && buf[i]=='[' )
                {
                 ++i; // Skip '['
                 skip_blanks();
                 i_pre_start = i;
                 std::size_t i_last_not_blank = i;
-                while( i<siz )
+                while( true )
                    {
-                    if( buf[i]==']' )
-                       {
-                        i_pre_len = i_last_not_blank - i_pre_start;
-                        ++i; // Skip ']'
-                        break;
-                       }
-                    else if( buf[i]=='\n' )
+                    if( i>=siz || buf[i]=='\n' )
                        {
                         notify_error("Unclosed initial \'[\' in the comment of define {}", def.label());
                         def.set_comment( std::string_view(buf.data()+i_start, i_last_not_blank-i_start) );
+                        break;
+                       }
+                    else if( buf[i]==']' )
+                       {
+                        i_pre_len = i_last_not_blank - i_pre_start + 1;
+                        ++i; // Skip ']'
                         break;
                        }
                     else
@@ -284,19 +285,21 @@ std::vector<RawDefine> parse(const std::string_view buf, std::vector<std::string
                    }
                 skip_blanks();
                }
-            def.set_comment_predecl( std::string_view(buf.data()+i_pre_start, i_pre_len) );
+            if( i_pre_start<siz )
+               {
+                def.set_comment_predecl( std::string_view(buf.data()+i_pre_start, i_pre_len) );
+               }
 
             // Collect the actual comment text
-            if( !def.has_comment() && buf[i]!='\n' )
+            if( !def.has_comment() && i<siz && buf[i]!='\n' )
                {
                 const std::size_t i_txt_start = i;
                 std::size_t i_txt_len = 0;
                 std::size_t i_last_not_blank = i;
-                while( i<siz )
-                   {
+                do {
                     if( buf[i]=='\n' )
                        {// Line finished
-                        i_txt_len = i_last_not_blank - i_txt_start;
+                        i_txt_len = i_last_not_blank - i_txt_start + 1;
                         break;
                        }
                     else
@@ -305,6 +308,8 @@ std::vector<RawDefine> parse(const std::string_view buf, std::vector<std::string
                         ++i;
                        }
                    }
+                while( i<siz );
+
                 def.set_comment( std::string_view(buf.data()+i_txt_start, i_txt_len) );
                }
            }
@@ -313,9 +318,6 @@ std::vector<RawDefine> parse(const std::string_view buf, std::vector<std::string
             notify_error("Define {} hasn't a comment", def.label());
            }
 
-        // Expecting a line end here
-        skip_blanks();
-        if( !eat_line_end() ) notify_error("Unexpected content after define \"{}\": {}", def.label(), str::escape(skip_line()));
         //DBGLOG("    [*] Collected define: label=\"{}\" value=\"{}\" comment=\"{}\"\n", def.label(), def.value(), def.comment())
         return def;
        };
@@ -335,7 +337,7 @@ std::vector<RawDefine> parse(const std::string_view buf, std::vector<std::string
        }
     catch(std::exception& e)
        {
-        throw dlg::parse_error(e.what(), line, i);
+        throw fmtstr::parse_error(e.what(), line, i);
        }
 
     return defines;
@@ -348,10 +350,10 @@ std::vector<RawDefine> parse(const std::string_view buf, std::vector<std::string
 
 //---------------------------------------------------------------------------
 // Parse a Sipro h file
-void parse(const std::string_view buf, plc::Library& lib, std::vector<std::string>& issues, const bool fussy =true)
+void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::string>& issues, const bool fussy)
 {
     // Get the raw defines
-    std::vector<RawDefine> defines = parse(buf, issues, fussy);
+    const std::vector<RawDefine> defines = do_parse(buf, issues, fussy);
     if( defines.empty() ) throw std::runtime_error("No defines found");
 
     // Now I'll convert the suitable defines to plc variable descriptors
@@ -361,7 +363,7 @@ void parse(const std::string_view buf, plc::Library& lib, std::vector<std::strin
     lib.global_constants().groups().back().set_name("Header_Constants");
     for( auto& def : defines )
        {
-        //DBGLOG(" - label=\"{}\" value=\"{}\" comment=\"{}\"\n", def.label(), def.value(), def.comment())
+        //DBGLOG("Define - label=\"{}\" value=\"{}\" comment=\"{}\" predecl=\"{}\"\n", def.label(), def.value(), str::iso_latin1_to_utf8(def.comment()), def.comment_predecl())
 
         // Must export these:
         //
@@ -374,45 +376,51 @@ void parse(const std::string_view buf, plc::Library& lib, std::vector<std::strin
         //            ↑ Value       ↑ IEC61131-3 type
 
         // Check if it's a Sipro register
-        if( sipro::Register reg = sipro::parse_register(def.value());
+        if( const sipro::Register reg(def.value());
             reg.is_valid() )
-           {
-           }
-
-        // Check if it's a numeric constant to be exported
-        else if( def.value_is_number() && plc::is_num_type(def.comment_predecl()) )
            {
             plcb::Variable var;
 
-            //var.set_name(s)
-            //var.set_type(s)
-            //var.set_length(n)
-            //var.set_arraydim(n)
-            //var.set_value(s)
-            //var.set_descr(s)
-            //
-            //var.Address.set_type(s)
-            //var.Address.set_typevar(s)
-            //var.Address.set_index(s)
-            //var.Address.set_subindex(s)
+            var.set_name( def.label() );
+            var.set_type( reg.iec_type() );
+            if( reg.is_va() ) var.set_length( reg.get_va_length() );
+            var.set_descr( def.comment() );
 
-            lib.global_constants().variables().push_back( var );
+            var.address().set_type( reg.iec_address_type() );
+            var.address().set_typevar( reg.iec_address_vartype() );
+            var.address().set_index( reg.iec_address_index() );
+            var.address().set_subindex( reg.index() );
+
+            lib.global_variables().groups().back().variables().push_back( var );
            }
 
+        // Check if it's a numeric constant to be exported
+        else if( def.value_is_number() )
+           {
+            // Must be exported to PLC?
+            if( plc::is_num_type(def.comment_predecl()) )
+               {
+                plcb::Variable var;
 
-        //  vaProjName     AT %MB700.0    : STRING[ 80 ]; {DE:"va0    - Nome progetto caricato"}
-        //  vbHeartBeat    AT %MB300.2    : BOOL;         {DE:"vb2    - Battito di vita ogni secondo"}
-        //  vnAlgn_Seq     AT %MW400.860  : INT;          {DE:"vn860  - Stato/risultato sequenze riscontri 'ID_ALGN'"}
-        //  vqProd_X       AT %MD500.977  : DINT;         {DE:"vq977  - Posizione bordo avanti del prodotto [mm]"}
-        //  vdPlcScanTime  AT %ML600.0    : LREAL;        {DE:"vd0    - Tempo di scansione del PLC [s]"}
-        //  vdJobDate      AT %ML600.253  : LREAL;        {DE:"vd253  - Timestamp of last job start"}
+                var.set_name( def.label() );
+                var.set_type( def.comment_predecl() );
 
-        // RET_ABORTED        : INT := -1; { DE:"Return: Program not completed" }
-        // BIT_CHS_CANTSTART  : UINT := 8192; { DE:"Stato Ch bit13: impossibile avviare il ciclo automatico per allarmi presenti o CMDA richiesto non attivo" }
-        // NO_POS_UM          : DINT := 999999999; { DE:"Invalid quote [um]" }
-        // SW_VER             : LREAL := 23.90; { DE:"Versione delle definizioni" }
+                var.set_value( def.value() );
+                var.set_descr( def.comment() );
+
+                lib.global_constants().groups().back().variables().push_back( var );
+               }
+            //else
+            //   {
+            //    DBGLOG(" - label=\"{}\" value=\"{}\" {}\n", def.label(), def.value(), def.comment_predecl())
+            //   }
+           }
+
+        else
+           {
+            throw fmtstr::error("Unrecognized define {} {}", def.label(), def.value());
+           }
        }
-
 }
 
 }//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::

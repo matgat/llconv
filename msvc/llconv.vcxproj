@@ -95,11 +95,15 @@
     <ClCompile Include="..\source\llconv.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\source\debug.hpp" />
+    <ClInclude Include="..\source\format_string.hpp" />
+    <ClInclude Include="..\source\h-parser.hpp" />
     <ClInclude Include="..\source\keyvals.hpp" />
-    <ClInclude Include="..\source\logging.hpp" />
     <ClInclude Include="..\source\plc-elements.hpp" />
     <ClInclude Include="..\source\plclib-writer.hpp" />
     <ClInclude Include="..\source\pll-parser.hpp" />
+    <ClInclude Include="..\source\pll-writer.hpp" />
+    <ClInclude Include="..\source\sipro.hpp" />
     <ClInclude Include="..\source\string-utilities.hpp" />
     <ClInclude Include="..\source\system.hpp" />
   </ItemGroup>

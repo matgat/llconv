@@ -1,5 +1,5 @@
-#ifndef keyvals_hpp
-#define keyvals_hpp
+#ifndef GUARD_keyvals_hpp
+#define GUARD_keyvals_hpp
 /*  ---------------------------------------------
     ©2021 matteo.gattanini@gmail.com
 
@@ -11,7 +11,7 @@
 #include <map>
 #include <optional>
 
-using namespace std::literals; // Use "..."sv
+using namespace std::literals; // "..."sv
 
 
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::

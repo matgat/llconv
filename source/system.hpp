@@ -1,5 +1,5 @@
-#ifndef system_hpp
-#define system_hpp
+#ifndef GUARD_system_hpp
+#define GUARD_system_hpp
 /*  ---------------------------------------------
     ©2021-2022 matteo.gattanini@gmail.com
 
@@ -24,19 +24,19 @@
     #include <sys/stat.h> // fstat
     #include <unistd.h> // unlink
   #endif
-#include <string>
-#include <string_view>
-#include <tuple>
-#include <stdexcept>
-#include <cstdio> // std::fopen, ...
-#include <cstdlib> // std::getenv
-//#include <fstream>
-//#include <chrono> // std::chrono::system_clock
-//using namespace std::chrono_literals; // 1s, 2h, ...
-#include <ctime> // std::time_t, std::strftime
-#include <regex> // std::regex* in glob
-#include <filesystem> // std::filesystem
-namespace fs = std::filesystem;
+    #include <string>
+    #include <string_view>
+    #include <tuple>
+    #include <stdexcept>
+    #include <cstdio> // std::fopen, ...
+    #include <cstdlib> // std::getenv
+    //#include <fstream>
+    //#include <chrono> // std::chrono::system_clock
+    //using namespace std::chrono_literals; // 1s, 2h, ...
+    #include <ctime> // std::time_t, std::strftime
+    #include <regex> // std::regex*
+    #include <filesystem> // std::filesystem
+    namespace fs = std::filesystem;
 
 
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -82,15 +82,16 @@ std::string get_lasterr_msg(DWORD e =0) noexcept
     if(e==0) e = ::GetLastError(); // ::WSAGetLastError()
     const DWORD buf_siz = 1024;
     TCHAR buf[buf_siz];
-    DWORD siz = ::FormatMessage( FORMAT_MESSAGE_FROM_SYSTEM |
-                                 FORMAT_MESSAGE_IGNORE_INSERTS|
-                                 FORMAT_MESSAGE_MAX_WIDTH_MASK,
-                                 nullptr,
-                                 e,
-                                 MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                                 buf,
-                                 buf_siz,
-                                 nullptr);
+    const DWORD siz =
+        ::FormatMessage( FORMAT_MESSAGE_FROM_SYSTEM |
+                         FORMAT_MESSAGE_IGNORE_INSERTS|
+                         FORMAT_MESSAGE_MAX_WIDTH_MASK,
+                         nullptr,
+                         e,
+                         MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                         buf,
+                         buf_siz,
+                         nullptr );
     std::string msg( "[" + std::to_string(e) + "]" );
     if(siz>0) msg += " " + std::string(buf, siz);
     return msg;
@@ -159,7 +160,7 @@ void edit_text_file(const std::string& pth, const std::size_t offset) noexcept
 
 
 /////////////////////////////////////////////////////////////////////////////
-class MemoryMappedFile //////////////////////////////////////////////////////
+class MemoryMappedFile
 {
  public:
     explicit MemoryMappedFile( const std::string& pth )
@@ -187,7 +188,7 @@ class MemoryMappedFile //////////////////////////////////////////////////////
             throw std::runtime_error("Couldn't create view of " + pth + " (" + get_lasterr_msg() + ")");
            }
       #else
-        int fd = open(pth.c_str(), O_RDONLY);
+        const int fd = open(pth.c_str(), O_RDONLY);
         if(fd == -1) throw std::runtime_error("Couldn't open file");
 
         // obtain file size
@@ -196,31 +197,56 @@ class MemoryMappedFile //////////////////////////////////////////////////////
         i_bufsiz = sbuf.st_size;
 
         i_buf = static_cast<const char*>(mmap(nullptr, i_bufsiz, PROT_READ, MAP_PRIVATE, fd, 0U));
-        if(i_buf == MAP_FAILED) throw std::runtime_error("Cannot map file");
+        if(i_buf == MAP_FAILED)
+           {
+            i_buf = nullptr;
+            throw std::runtime_error("Cannot map file");
+           }
       #endif
        }
 
-   ~MemoryMappedFile() noexcept
+    ~MemoryMappedFile() noexcept
        {
-      #ifdef MS_WINDOWS
-        ::UnmapViewOfFile(i_buf);
-        ::CloseHandle(hMapping);
-        ::CloseHandle(hFile);
-      #else
-        /* int ret = */ munmap(static_cast<void*>(const_cast<char*>(i_buf)), i_bufsiz);
-        //if(ret==-1) std::cerr << "munmap() failed\n";
-      #endif
+        if(i_buf)
+           {
+          #ifdef MS_WINDOWS
+            ::UnmapViewOfFile(i_buf);
+            if(hMapping) ::CloseHandle(hMapping);
+            if(hFile!=INVALID_HANDLE_VALUE) ::CloseHandle(hFile);
+          #else
+            /* const int ret = */ munmap(static_cast<void*>(const_cast<char*>(i_buf)), i_bufsiz);
+            //if(ret==-1) std::cerr << "munmap() failed\n";
+          #endif
+           }
        }
 
-   MemoryMappedFile(const MemoryMappedFile& other) = delete;
-   MemoryMappedFile& operator=(MemoryMappedFile other) = delete;
-   MemoryMappedFile(MemoryMappedFile&& other) = default;
-   MemoryMappedFile& operator=(MemoryMappedFile&& other) = default;
+    // Prevent copy
+    MemoryMappedFile(const MemoryMappedFile& other) = delete;
+    MemoryMappedFile& operator=(const MemoryMappedFile& other) = delete;
 
-   [[nodiscard]] std::size_t size() const noexcept { return i_bufsiz; }
-   [[nodiscard]] const char* begin() const noexcept { return i_buf; }
-   [[nodiscard]] const char* end() const noexcept { return i_buf + i_bufsiz; }
-   [[nodiscard]] std::string_view as_string_view() const noexcept { return std::string_view{i_buf, i_bufsiz}; }
+    // Move
+    MemoryMappedFile(MemoryMappedFile&& other) noexcept
+      : i_bufsiz(other.i_bufsiz)
+      , i_buf(other.i_buf)
+    #ifdef MS_WINDOWS
+      , hFile(other.hFile)
+      , hMapping(other.hMapping)
+    #endif
+       {
+        other.i_bufsiz = 0;
+        other.i_buf = nullptr;
+      #ifdef MS_WINDOWS
+        other.hFile = INVALID_HANDLE_VALUE;
+        other.hMapping = nullptr;
+      #endif
+       }
+    // Prevent move assignment
+    MemoryMappedFile& operator=(MemoryMappedFile&& other) = delete;
+
+    [[nodiscard]] std::size_t size() const noexcept { return i_bufsiz; }
+    [[nodiscard]] const char* begin() const noexcept { return i_buf; }
+    [[nodiscard]] const char* end() const noexcept { return i_buf + i_bufsiz; }
+    [[nodiscard]] std::string_view as_string_view() const noexcept { return std::string_view{i_buf, i_bufsiz}; }
 
  private:
     std::size_t i_bufsiz = 0;
@@ -230,6 +256,7 @@ class MemoryMappedFile //////////////////////////////////////////////////////
     HANDLE hMapping = nullptr;
   #endif
 };
+
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -248,13 +275,15 @@ class file_write
       #endif
        }
 
-    file_write(const file_write&) = delete;
-    file_write& operator=(const file_write&) = delete;
-
     ~file_write() noexcept
        {
         fclose(i_File);
        }
+
+    file_write(const file_write&) = delete;
+    file_write(file_write&&) = delete;
+    file_write& operator=(const file_write&) = delete;
+    file_write& operator=(file_write&&) = delete;
 
     const file_write& operator<<(const char c) const noexcept
        {
@@ -408,7 +437,7 @@ std::vector<fs::path> glob(const std::string_view str_pattern)
                 // Substitute pattern
                 regexp_pattern = std::regex_replace(regexp_pattern, std::regex(R"(\*)"), ".*");
                 regexp_pattern = std::regex_replace(regexp_pattern, std::regex(R"(\?)"), ".");
-                //dlg::print("regexp_pattern: {}" ,regexp_pattern);
+                //fmtstr::print("regexp_pattern: {}" ,regexp_pattern);
                 return regexp_pattern;
                };
             const std::regex reg(glob2regex(file_pattern), std::regex_constants::icase);
@@ -454,27 +483,27 @@ std::vector<fs::path> glob(const std::string_view str_pattern)
 //
 //    std::string_view directory() const noexcept
 //       {
-//        if( i_pathpos == std::string::npos ) return std::string_view(i_path.c_str(),0);
-//        return std::string_view(i_path.c_str(), i_pathpos+1);
+//        if( i_pathpos == std::string::npos ) return std::string_view(i_path.data(),0);
+//        return std::string_view(i_path.data(), i_pathpos+1);
 //       }
 //
 //    std::string_view filename() const noexcept
 //       {
 //        if( i_pathpos == std::string::npos ) return std::string_view(i_path);
-//        return std::string_view(i_path.c_str()+i_pathpos+1, i_path.length()-(i_pathpos+1));
+//        return std::string_view(i_path.data()+i_pathpos+1, i_path.length()-(i_pathpos+1));
 //       }
 //
 //    std::string_view extension() const noexcept
 //       {
-//        if( i_extpos == std::string::npos ) return std::string_view(i_path.c_str(),0);
-//        return std::string_view(i_path.c_str()+i_extpos, i_path.length()-i_extpos);
+//        if( i_extpos == std::string::npos ) return std::string_view(i_path.data(),0);
+//        return std::string_view(i_path.data()+i_extpos, i_path.length()-i_extpos);
 //       }
 //
 //    std::string_view stem() const noexcept
 //       {
 //        if( i_extpos == std::string::npos ) return filename();
-//        else if( i_pathpos == std::string::npos ) return std::string_view(i_path.c_str(), i_extpos);
-//        return std::string_view(i_path.c_str()+i_pathpos+1, i_extpos-i_pathpos-1);
+//        else if( i_pathpos == std::string::npos ) return std::string_view(i_path.data(), i_extpos);
+//        return std::string_view(i_path.data()+i_pathpos+1, i_extpos-i_pathpos-1);
 //       }
 //
 //    std::string replace_extension(std::string newext) const noexcept

@@ -1,5 +1,5 @@
-#ifndef string_utilities_hpp
-#define string_utilities_hpp
+#ifndef GUARD_string_utilities_hpp
+#define GUARD_string_utilities_hpp
 /*  ---------------------------------------------
     ©2021 matteo.gattanini@gmail.com
 
@@ -12,7 +12,7 @@
 #include <optional> // std::optional
 #include <fmt/core.h> // fmt::format
 
-using namespace std::literals; // Use "..."sv
+using namespace std::literals; // "..."sv
 
 
 
@@ -84,7 +84,8 @@ std::string& escape(std::string& s) noexcept
 std::string escape(const std::string_view sv) noexcept
    {
     std::string s(sv);
-    return escape(s);
+    escape(s);
+    return s;
    }
 
 
@@ -148,6 +149,60 @@ std::size_t hash(const std::string_view s)
 }
 
 
+//-----------------------------------------------------------------------
+// Returns true if text matches glob-like pattern with wildcards (*, ?)
+//bool glob_match(const char* text, const char* glob, const char dont_match ='/')
+//{
+//    // 'dont_match': character not matched by any wildcards
+//    const char *text_backup = nullptr;
+//    const char *glob_backup = nullptr;
+//    while( *text!='\0' )
+//       {
+//        if( *glob=='*' )
+//           {// new '*'-loop: backup positions in pattern and text
+//            text_backup = text;
+//            glob_backup = ++glob;
+//           }
+//        else if( *glob==*text || (*glob=='?' && *text!=dont_match) )
+//           {// Character matched
+//            ++text;
+//            ++glob;
+//           }
+//        else if( !glob_backup || (text_backup && *text_backup==dont_match) )
+//           {// No match
+//            return false;
+//           }
+//        else
+//           {// '*'-loop: backtrack after the last '*'
+//            if(text_backup) text = ++text_backup;
+//            glob = glob_backup;
+//           }
+//       }
+//    // Ignore trailing stars
+//    while(*glob=='*') ++glob;
+//    // At end of text means success if nothing else is left to match
+//    return *glob=='\0';
+//}
+
+
+//---------------------------------------------------------------------------
+std::string iso_latin1_to_utf8(const std::string_view ansi)
+{
+    std::string utf8;
+    for( std::size_t i=0; i<ansi.size(); ++i )
+       {
+        if(ansi[i] < 128)
+           {
+            utf8 += ansi[i];
+           }
+        else
+           {
+            utf8 += 0xC0 | (ansi[i] >> 6);
+            utf8 += 0x80 | (ansi[i] & 0x3f);
+           }
+       }
+    return utf8;
+}
 
 
 /////////////////////////////////////////////////////////////////////////////

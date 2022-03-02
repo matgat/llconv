@@ -9,7 +9,8 @@ HEADERS = $(wildcard $(SRCDIR)/*.hpp)
 
 CXX = g++
 CXXFLAGS = -std=c++2b -funsigned-char -Wextra -Wall -pedantic -O3 -DFMT_HEADER_ONLY -Isource/fmt/include
-#CXXFLAGS = /std:c++latest /utf-8 /J /W4 /O2
+#CXX = cl.exe
+#CXXFLAGS = /std:c++latest /utf-8 /J /W4 /O2 /D_CRT_SECURE_NO_WARNINGS /DFMT_HEADER_ONLY /I../source/fmt/include
 
 ifeq ($(OS),Windows_NT)
     TARGET = $(BLDDIR)/$(PRJNAME).exe

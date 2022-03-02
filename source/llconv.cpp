@@ -18,14 +18,14 @@
 #include "system.hpp" // sys::*, fs::*
 #include "string-utilities.hpp" // str::tolower
 #include "keyvals.hpp" // str::keyvals
-#include "logging.hpp" // dlg::parse_error
+#include "format_string.hpp" // fmtstr::parse_error
 #include "h-parser.hpp" // h::*
 #include "pll-parser.hpp" // pll::*
 #include "plc-elements.hpp" // plcb::*
 #include "plclib-writer.hpp" // plclib::write
 #include "pll-writer.hpp" // pll::write
 
-using namespace std::literals; // Use "..."sv
+using namespace std::literals; // "..."sv
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -171,30 +171,15 @@ class Arguments
 
 //---------------------------------------------------------------------------
 // Import a file
-template<typename F> void import_file(F parsefunct, const fs::path& pth, plcb::Library& lib, const Arguments& args, std::vector<std::string>& issues)
+template<typename F> void parse_buffer(F parsefunct, const std::string_view buf, const std::string& path, plcb::Library& lib, const Arguments& args, std::vector<std::string>& issues)
 {
-    const std::string in_path{pth.string()};
-
-    sys::MemoryMappedFile in_file_buf(in_path); // Do not deallocate until the end!
-
-    // Show file name and size
-    if( args.verbose() )
-       {
-        std::cout << "Processing " << in_path;
-        std::cout << " (size: ";
-        if(in_file_buf.size()>1048576) std::cout << in_file_buf.size()/1048576 << "MB)\n";
-        else if(in_file_buf.size()>1024) std::cout << in_file_buf.size()/1024 << "KB)\n";
-        else std::cout << in_file_buf.size() << "B)\n";
-       }
-
-    // Parse
     std::vector<std::string> parse_issues;
     try{
-        parsefunct(in_file_buf.as_string_view(), lib, parse_issues, args.fussy());
+        parsefunct(buf, lib, parse_issues, args.fussy());
        }
-    catch( dlg::parse_error& e)
+    catch( fmtstr::parse_error& e)
        {
-        sys::edit_text_file( in_path, e.pos() );
+        sys::edit_text_file( path, e.pos() );
         throw;
        }
     if(args.verbose()) std::cout << "    " << lib.to_str() << '\n';
@@ -203,13 +188,13 @@ template<typename F> void import_file(F parsefunct, const fs::path& pth, plcb::L
     if( !parse_issues.empty() )
        {
         // Append to overall issues list
-        issues.push_back( fmt::format("____Parsing of {}",in_path) );
+        issues.push_back( fmt::format("____Parsing of {}",path) );
         issues.insert(issues.end(), parse_issues.begin(), parse_issues.end());
         // Log in a file
-        const std::string log_file_path{ str::replace_extension(in_path, ".log") };
+        const std::string log_file_path{ str::replace_extension(path, ".log") };
         sys::file_write log_file_write( log_file_path );
         log_file_write << sys::human_readable_time_stamp() << '\n';
-        log_file_write << "[Parse log of "sv << in_path << "]\n"sv;
+        log_file_write << "[Parse log of "sv << path << "]\n"sv;
         for(const std::string& issue : parse_issues)
            {
             log_file_write << "[!] "sv << issue << '\n';
@@ -225,7 +210,7 @@ template<typename F> void import_file(F parsefunct, const fs::path& pth, plcb::L
         lib.sort();
        }
 
-    //auto [ctime, mtime] = sys::get_file_dates(in_path);
+    //auto [ctime, mtime] = sys::get_file_dates(path);
     //std::cout << "pll created:" << sys::human_readable_time_stamp(ctime) << " modified:" << sys::human_readable_time_stamp(mtime) << '\n';
     //lib.set_dates(ctime, mtime);
 }
@@ -282,25 +267,41 @@ int main( int argc, const char* argv[] )
             std::cout << "Running in: " << fs::current_path().string() << '\n';
            }
 
-        // Check input files, divide them in h and pll
         if( args.files().empty() )
            {
             throw std::invalid_argument("No files passed");
            }
-        std::vector<fs::path> h_files, pll_files;
-        h_files.reserve( args.files().size() );
-        pll_files.reserve( args.files().size() );
+
         for( const auto& pth : args.files() )
            {
+            // Prepare the file buffer
+            const std::string file_path{pth.string()};
+            const sys::MemoryMappedFile file_buf(file_path); // Do not deallocate until the very end!
+
+            // Show file name and size
+            if( args.verbose() )
+               {
+                std::cout << "Processing " << file_path;
+                std::cout << " (size: ";
+                if(file_buf.size()>1048576) std::cout << file_buf.size()/1048576 << "MB)\n";
+                else if(file_buf.size()>1024) std::cout << file_buf.size()/1024 << "KB)\n";
+                else std::cout << file_buf.size() << "B)\n";
+               }
+
+            plcb::Library lib( pth.stem().string() ); // This will refer to 'file_buf'!
+
             // Recognize by file extension
             const std::string ext {str::tolower(pth.extension().string())};
             if( ext == ".pll" )
-               {
-                pll_files.push_back(pth);
+               {// pll -> plclib
+                parse_buffer(pll::parse, file_buf.as_string_view(), file_path, lib, args, issues);
+                write_plclib(lib, pth, args);
                }
             else if( ext == ".h" )
-               {
-                h_files.push_back(pth);
+               {// h -> pll,plclib
+                parse_buffer(h::parse, file_buf.as_string_view(), file_path, lib, args, issues);
+                write_pll(lib, pth, args);
+                write_plclib(lib, pth, args);
                }
             else
                {
@@ -310,23 +311,6 @@ int main( int argc, const char* argv[] )
                }
            }
 
-        // h -> pll,plclib
-        for( const auto& pth : h_files )
-           {
-            plcb::Library lib( pth.stem().string() );
-            import_file(h::parse, pth, lib, args, issues);
-            write_pll(lib, pth, args);
-            write_plclib(lib, pth, args);
-           }
-
-        // pll -> plclib
-        for( const auto& pth : pll_files )
-           {
-            plcb::Library lib( pth.stem().string() );
-            import_file(pll::parse, pth, lib, args, issues);
-            write_plclib(lib, pth, args);
-           }
-
         if( issues.size()>0 )
            {
             std::cerr << "[!] " << issues.size() << " issues found\n";
@@ -334,8 +318,9 @@ int main( int argc, const char* argv[] )
                {
                 std::cerr << "    " << issue << '\n';
                }
-            return -1;
+            return 1;
            }
+
         return 0;
        }
 
@@ -350,5 +335,5 @@ int main( int argc, const char* argv[] )
         std::cerr << "!! Error: " << e.what() << '\n';
        }
 
-    return -1;
+    return 2;
 }

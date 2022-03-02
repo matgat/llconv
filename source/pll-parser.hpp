@@ -1,5 +1,5 @@
-#ifndef pll_parser_hpp
-#define pll_parser_hpp
+#ifndef GUARD_pll_parser_hpp
+#define GUARD_pll_parser_hpp
 /*  ---------------------------------------------
     ©2021 matteo.gattanini@gmail.com
 
@@ -18,9 +18,10 @@
 
 #include "string-utilities.hpp" // str::escape
 #include "plc-elements.hpp" // plcb::*
-#include "logging.hpp" // dlg::parse_error, dlg::error, DBGLOG
+#include "format_string.hpp" // fmtstr::parse_error, fmtstr::error
+#include "debug.hpp" // DBGLOG
 
-using namespace std::literals; // Use "..."sv
+using namespace std::literals; // "..."sv
 
 
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -30,7 +31,7 @@ namespace pll //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 //---------------------------------------------------------------------------
 // Parse pll file
-void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::string>& issues, const bool fussy =true)
+void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::string>& issues, const bool fussy)
 {
     // Check possible BOM    |  Encoding    |   Bytes     | Chars |
     //                       |--------------|-------------|-------|
@@ -97,7 +98,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
     //---------------------------------
     auto eat_line_end = [&]() noexcept -> bool
        {
-        if( buf[i]=='\n' )
+        if( i<siz && buf[i]=='\n' )
            {
             ++i;
             ++line;
@@ -134,7 +135,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                }
             ++i;
            }
-        throw dlg::parse_error("Unclosed comment", line_start, i_start);
+        throw fmtstr::parse_error("Unclosed comment", line_start, i_start);
        };
 
     //---------------------------------
@@ -208,10 +209,10 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
     // Read a (base10) positive integer literal
     auto extract_index = [&]() -> std::size_t
        {
-        if( i>=siz ) throw dlg::error("Index not found");
+        if( i>=siz ) throw fmtstr::error("Index not found");
         if( buf[i]=='+' ) ++i; // sign = 1;
-        else if( buf[i]=='-' ) throw dlg::error("Negative index"); // {sign = -1; ++i;}
-        if( !std::isdigit(buf[i]) ) throw dlg::error("Invalid index");
+        else if( buf[i]=='-' ) throw fmtstr::error("Negative index"); // {sign = -1; ++i;}
+        if( !std::isdigit(buf[i]) ) throw fmtstr::error("Invalid index");
         std::size_t result = (buf[i]-'0');
         const std::size_t base = 10u;
         while( ++i<siz && std::isdigit(buf[i]) ) result = (base*result) + (buf[i]-'0');
@@ -278,7 +279,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                 while( std::isdigit(buf[i]) );
                }
            }
-        if( found_expchar && !found_expval ) throw dlg::error("Invalid floating point number: No exponent value"); // ex "123E"
+        if( found_expchar && !found_expval ) throw fmtstr::error("Invalid floating point number: No exponent value"); // ex "123E"
 
         // [calculate result]
         double result = 0.0;
@@ -292,7 +293,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
            }
         else
            {
-            throw dlg::error("Invalid floating point number");
+            throw fmtstr::error("Invalid floating point number");
             //if(found_expchar) result = 1.0; // things like 'E,+E,-exp,exp+,E-,...'
             //else result = std::numeric_limits<double>::quiet_NaN(); // things like '+,-,,...'
            }
@@ -313,7 +314,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
     //        else if( buf[i]=='\n' ) break;
     //        ++i;
     //       }
-    //    throw dlg::error("Unclosed content (\'{}\' expected)", str::escape(c));
+    //    throw fmtstr::error("Unclosed content (\'{}\' expected)", str::escape(c));
     //   };
 
     //---------------------------------
@@ -330,7 +331,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
     //        else if( buf[i]=='\n' ) ++line;
     //        ++i;
     //       }
-    //    throw dlg::error("Unclosed content (\'{}\' expected)", str::escape(c));
+    //    throw fmtstr::error("Unclosed content (\'{}\' expected)", str::escape(c));
     //   };
 
 
@@ -349,7 +350,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             else if( buf[i]=='\n' ) ++line;
             ++i;
            }
-        throw dlg::parse_error(fmt::format("Unclosed content (\'{}\' expected)", str::escape(c)), line_start, i_start);
+        throw fmtstr::parse_error(fmt::format("Unclosed content (\'{}\' expected)", str::escape(c)), line_start, i_start);
        };
 
     //---------------------------------
@@ -366,8 +367,8 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
     //        else if( buf[i]=='\n' ) ++line;
     //        ++i;
     //       }
-    //    throw dlg::error(");
-    //    throw dlg::parse_error(fmt::format("Unclosed content (\"{}\" expected)",tok), line_start, i_start);
+    //    throw fmtstr::error(");
+    //    throw fmtstr::parse_error(fmt::format("Unclosed content (\"{}\" expected)",tok), line_start, i_start);
     //   };
 
     //---------------------------------
@@ -389,7 +390,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                }
             else ++i;
            }
-        throw dlg::parse_error(fmt::format("Unclosed content (\"{}\" expected)",tok), line_start, i_start);
+        throw fmtstr::parse_error(fmt::format("Unclosed content (\"{}\" expected)",tok), line_start, i_start);
        };
 
     //---------------------------------
@@ -412,10 +413,10 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         plcb::Directive dir;
         dir.set_key( collect_identifier() );
         skip_blanks();
-        if( i>=siz || buf[i]!=':' ) throw dlg::error("Missing \':\' after directive {}", dir.key());
+        if( i>=siz || buf[i]!=':' ) throw fmtstr::error("Missing \':\' after directive {}", dir.key());
         ++i; // Skip ':'
         skip_blanks();
-        if( i>=siz ) throw dlg::error("Truncated directive {}", dir.key());
+        if( i>=siz ) throw fmtstr::error("Truncated directive {}", dir.key());
         if( buf[i]=='\"' )
            {
             ++i; // Skip the first '\"'
@@ -423,8 +424,8 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             const std::size_t i_start = i;
             while( i<siz && buf[i]!='\"' )
                {
-                if( buf[i]=='\n' ) throw dlg::error("Unclosed directive {} value (\'\"\' expected)", dir.key());
-                else if( buf[i]=='<' || buf[i]=='>' || buf[i]=='\"' ) throw dlg::error("Invalid character \'{}\' in directive {} value", buf[i], dir.key());
+                if( buf[i]=='\n' ) throw fmtstr::error("Unclosed directive {} value (\'\"\' expected)", dir.key());
+                else if( buf[i]=='<' || buf[i]=='>' || buf[i]=='\"' ) throw fmtstr::error("Invalid character \'{}\' in directive {} value", buf[i], dir.key());
                 ++i;
                }
             dir.set_value( std::string_view(buf.data()+i_start, i-i_start) );
@@ -435,7 +436,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             dir.set_value( collect_identifier() );
            }
         skip_blanks();
-        if( i>=siz || buf[i]!='}' ) throw dlg::error("Unclosed directive {} after {}", dir.key(), dir.value());
+        if( i>=siz || buf[i]!='}' ) throw fmtstr::error("Unclosed directive {} after {}", dir.key(), dir.value());
         ++i; // Skip '}'
         //DBGLOG("    [*] Collected directive \"{}\" at line {}\n", dir.key(), line)
         return dir;
@@ -448,7 +449,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         skip_blanks();
         par.set_name( collect_identifier() );
         skip_blanks();
-        if( i>=siz || buf[i]!=';' ) throw dlg::error("Missing \';\' after macro parameter");
+        if( i>=siz || buf[i]!=';' ) throw fmtstr::error("Missing \';\' after macro parameter");
         ++i; // Skip ';'
         skip_blanks();
         if( is_directive() )
@@ -474,24 +475,24 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
            {// Specifying an array ex. ARRAY[ 0..999 ] OF BOOL;
             // Get array size
             skip_blanks();
-            if( i>=siz || buf[i]!='[' ) throw dlg::error("Expected \'[\' in array variable \"{}\"", var.name());
+            if( i>=siz || buf[i]!='[' ) throw fmtstr::error("Expected \'[\' in array variable \"{}\"", var.name());
             ++i; // Skip '['
             // TODO: collect array dimensions (multidimensional: dim0, dim1, dim2)
             skip_blanks();
             const std::size_t start_idx = extract_index();
-            if( start_idx!=0u ) throw dlg::error("Invalid array start index ({}) of variable \"{}\"", start_idx, var.name());
+            if( start_idx!=0u ) throw fmtstr::error("Invalid array start index ({}) of variable \"{}\"", start_idx, var.name());
             skip_blanks();
-            if( !eat_string(".."sv) ) throw dlg::error("Expected \"..\" in array index of variable \"{}\"", var.name());
+            if( !eat_string(".."sv) ) throw fmtstr::error("Expected \"..\" in array index of variable \"{}\"", var.name());
             skip_blanks();
             const std::size_t end_idx = extract_index();
-            if( end_idx < start_idx ) throw dlg::error("Invalid array indexes {}..{} of variable \"{}\"", start_idx, end_idx, var.name());
+            if( end_idx < start_idx ) throw fmtstr::error("Invalid array indexes {}..{} of variable \"{}\"", start_idx, end_idx, var.name());
             skip_blanks();
-            if( i<siz && buf[i]==',' ) throw dlg::error("Multidimensional arrays not yet supported in variable \"{}\"", var.name());
-            if( i>=siz || buf[i]!=']' ) throw dlg::error("Expected \']\' in array variable \"{}\"", var.name());
+            if( i<siz && buf[i]==',' ) throw fmtstr::error("Multidimensional arrays not yet supported in variable \"{}\"", var.name());
+            if( i>=siz || buf[i]!=']' ) throw fmtstr::error("Expected \']\' in array variable \"{}\"", var.name());
             ++i; // Skip ']'
             skip_blanks();
-            if( !eat_token("OF"sv) ) throw dlg::error("Expected \"OF\" in array variable \"{}\"", var.name());
-            var.set_arraydim( (end_idx+1u) - start_idx );
+            if( !eat_token("OF"sv) ) throw fmtstr::error("Expected \"OF\" in array variable \"{}\"", var.name());
+            var.set_arraydim( end_idx - start_idx + 1u );
             skip_blanks();
            }
 
@@ -504,9 +505,9 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             ++i; // Skip '['
             skip_blanks();
             const std::size_t len = extract_index();
-            if( len<=1u ) throw dlg::error("Invalid length ({}) of variable \"{}\"", len, var.name());
+            if( len<=1u ) throw fmtstr::error("Invalid length ({}) of variable \"{}\"", len, var.name());
             skip_blanks();
-            if( i>=siz || buf[i]!=']' ) throw dlg::error("Expected \']\' in variable length \"{}\"", var.name());
+            if( i>=siz || buf[i]!=']' ) throw fmtstr::error("Expected \']\' in variable length \"{}\"", var.name());
             ++i; // Skip ']'
             skip_blanks();
             var.set_length( len );
@@ -516,10 +517,10 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         if( buf[i]==':' )
            {
             ++i; // Skip ':'
-            if( i>=siz || buf[i]!='=' ) throw dlg::error("Unexpected colon in variable \"{}\" type", var.name());
+            if( i>=siz || buf[i]!='=' ) throw fmtstr::error("Unexpected colon in variable \"{}\" type", var.name());
             ++i; // Skip '='
             skip_blanks();
-            if( i<siz && buf[i]=='[' ) throw dlg::error("Array initialization not yet supported in variable \"{}\"", var.name());
+            if( i<siz && buf[i]=='[' ) throw fmtstr::error("Array initialization not yet supported in variable \"{}\"", var.name());
 
             //var.set_value( collect_numeric_value() );
             const std::size_t i_start = i;
@@ -533,8 +534,8 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                     ++i; // Skip ';'
                     break;
                    }
-                else if( buf[i]=='\n' ) throw dlg::error("Unclosed variable \"{}\" value {} (\';\' expected)", var.name(), std::string_view(buf.data()+i_start, i-i_start));
-                else if( buf[i]==':' || buf[i]=='=' || buf[i]=='<' || buf[i]=='>' || buf[i]=='\"' ) throw dlg::error("Invalid character \'{}\' in variable \"{}\" value {}", buf[i], var.name(), std::string_view(buf.data()+i_start, i-i_start));
+                else if( buf[i]=='\n' ) throw fmtstr::error("Unclosed variable \"{}\" value {} (\';\' expected)", var.name(), std::string_view(buf.data()+i_start, i-i_start));
+                else if( buf[i]==':' || buf[i]=='=' || buf[i]=='<' || buf[i]=='>' || buf[i]=='\"' ) throw fmtstr::error("Invalid character \'{}\' in variable \"{}\" value {}", buf[i], var.name(), std::string_view(buf.data()+i_start, i-i_start));
                 ++i;
                }
            }
@@ -569,26 +570,26 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         skip_blanks();
         var.set_name( collect_identifier() );
         skip_blanks();
-        if( i<siz && buf[i]==',' ) throw dlg::error("Multiple names not supported in declaration of variable \"{}\"", var.name());
+        if( i<siz && buf[i]==',' ) throw fmtstr::error("Multiple names not supported in declaration of variable \"{}\"", var.name());
 
         // [Location address]
         if( eat_token("AT"sv) )
            {// Specified a location address %<type><typevar><index>.<subindex>
             skip_blanks();
-            if( i>=siz || buf[i]!='%' ) throw dlg::error("Expected \'%\' in variable \"{}\" address", var.name());
+            if( i>=siz || buf[i]!='%' ) throw fmtstr::error("Expected \'%\' in variable \"{}\" address", var.name());
             ++i; // Skip '%'
             // Here expecting something like: MB300.6000
             var.address().set_type( buf[i] ); i+=1; // In the Sipro/LogicLab world the address type is always 'M'
             var.address().set_typevar( buf[i] ); i+=1;
             var.address().set_index( collect_digits() );
-            if( i>=siz || buf[i]!='.' ) throw dlg::error("Expected \'.\' in variable \"{}\" address", var.name());
+            if( i>=siz || buf[i]!='.' ) throw fmtstr::error("Expected \'.\' in variable \"{}\" address", var.name());
             ++i; // Skip '.'
             var.address().set_subindex( collect_digits() );
             skip_blanks();
            }
 
         // [Name/Type separator]
-        if( i>=siz || buf[i]!=':' ) throw dlg::error("Expected \':\' before variable \"{}\" type", var.name());
+        if( i>=siz || buf[i]!=':' ) throw fmtstr::error("Expected \':\' before variable \"{}\" type", var.name());
         ++i; // Skip ':'
 
         collect_rest_of_variable(var);
@@ -617,8 +618,8 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             if( eat_string("END_STRUCT;"sv) ) break;
             strct.members().push_back( collect_variable() );
             // Some checks
-            //if( strct.members().back().has_value() ) throw dlg::error("Struct member \"{}\" cannot have a value ({})", strct.members().back().name(), strct.members().back().value());
-            if( strct.members().back().has_address() ) throw dlg::error("Struct member \"{}\" cannot have an address", strct.members().back().name());
+            //if( strct.members().back().has_value() ) throw fmtstr::error("Struct member \"{}\" cannot have a value ({})", strct.members().back().name(), strct.members().back().value());
+            if( strct.members().back().has_address() ) throw fmtstr::error("Struct member \"{}\" cannot have an address", strct.members().back().name());
            }
 
         // Expecting a line end now
@@ -636,7 +637,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
 
         // [Value]
         skip_blanks();
-        if( !eat_string(":="sv) ) throw dlg::error("Value not found in enum element \"{}\"", elem.name());
+        if( !eat_string(":="sv) ) throw fmtstr::error("Value not found in enum element \"{}\"", elem.name());
         skip_blanks();
         elem.set_value( collect_numeric_value() );
         skip_blanks();
@@ -688,7 +689,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
 
         // End expected
         skip_blanks();
-        if( !eat_string(");"sv) ) throw dlg::error("Expected termination \");\" after enum \"{}\"", en.name());
+        if( !eat_string(");"sv) ) throw fmtstr::error("Expected termination \");\" after enum \"{}\"", en.name());
 
         // Expecting a line end now
         skip_blanks();
@@ -707,16 +708,16 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
 
         // [Min and Max]
         skip_blanks();
-        if (i >= siz || buf[i] != '(') throw dlg::error("Expected \"(min..max)\" in subrange \"{}\"", subr.name());
+        if (i >= siz || buf[i] != '(') throw fmtstr::error("Expected \"(min..max)\" in subrange \"{}\"", subr.name());
         ++i; // Skip '('
         skip_blanks();
         const double min_val = extract_double();
         skip_blanks();
-        if (!eat_string(".."sv)) throw dlg::error("Expected \"..\" in subrange \"{}\"", subr.name());
+        if (!eat_string(".."sv)) throw fmtstr::error("Expected \"..\" in subrange \"{}\"", subr.name());
         skip_blanks();
         const double max_val = extract_double();
         skip_blanks();
-        if (i >= siz || buf[i] != ')') throw dlg::error("Expected \')\' in subrange \"{}\"", subr.name());
+        if (i >= siz || buf[i] != ')') throw fmtstr::error("Expected \')\' in subrange \"{}\"", subr.name());
         ++i; // Skip ')'
         subr.set_range(min_val, max_val);
 
@@ -815,7 +816,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                         collecting.pous->back().set_name(name);
                         // Dopo il nome dovrebbe esserci la dichiarazione del parametro ritornato
                         skip_blanks();
-                        if( i>=siz || buf[i]!=':' ) throw dlg::error("Missing return type in function \"{}\"", name);
+                        if( i>=siz || buf[i]!=':' ) throw fmtstr::error("Missing return type in function \"{}\"", name);
                         ++i; // Skip ':'
                         skip_blanks();
                         collecting.pous->back().set_return_type( collect_until_char_trimmed('\n') );
@@ -857,7 +858,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                            }
                         else
                            {
-                            throw dlg::error("Unexpected content in global variables declaration: {}", str::escape(skip_line()));
+                            throw fmtstr::error("Unexpected content in global variables declaration: {}", str::escape(skip_line()));
                            }
                        }
                     else
@@ -877,7 +878,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                     //(* Body *)
                     //END_POU
                     skip_blanks();
-                    if(i>=siz) throw dlg::error("{} not closed by {}", collecting.pou_start, collecting.pou_end);
+                    if(i>=siz) throw fmtstr::error("{} not closed by {}", collecting.pou_start, collecting.pou_end);
                     else if( eat_line_end() ) continue;
                     else
                        {
@@ -946,7 +947,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                                        }
                                     else
                                        {
-                                        throw dlg::error("Unexpected content in header of {} {}: {}", collecting.pou_start, collecting.pous->back().name(), str::escape(skip_line()));
+                                        throw fmtstr::error("Unexpected content in header of {} {}: {}", collecting.pou_start, collecting.pous->back().name(), str::escape(skip_line()));
                                        }
                                    }
                                 else if( eat_token(collecting.pou_end) )
@@ -979,7 +980,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                                     collecting.vars->push_back( collect_variable() );
                                     //DBGLOG("    {} variable \"{}\": {}\n", collecting.pou_start, collecting.vars->back().name(), collecting.vars->back().descr())
                                     // Check if a value was needed
-                                    if( collecting.var_value_needed && !collecting.vars->back().has_value() ) throw dlg::error("Value not specified for variable \"{}\"", collecting.vars->back().name());
+                                    if( collecting.var_value_needed && !collecting.vars->back().has_value() ) throw fmtstr::error("Value not specified for variable \"{}\"", collecting.vars->back().name());
                                    }
                                 break;
 
@@ -1006,7 +1007,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                     //(* Macro body *)
                     //END_MACRO
                     skip_blanks();
-                    if(i>=siz) throw dlg::error("MACRO not closed by END_MACRO");
+                    if(i>=siz) throw fmtstr::error("MACRO not closed by END_MACRO");
                     else if( eat_line_end() ) continue;
                     else
                        {
@@ -1084,7 +1085,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                     //    vbMsgs AT %MB300.6000 : ARRAY[ 0..999 ] OF BOOL; { DE:"ivbMsgs Array messaggi attivati !MAX_MESSAGES!" }
                     //    END_VAR
                     skip_blanks();
-                    if(i>=siz) throw dlg::error("VAR_GLOBAL not closed by END_VAR");
+                    if(i>=siz) throw fmtstr::error("VAR_GLOBAL not closed by END_VAR");
                     else if( eat_line_end() ) continue;
                     else if( is_directive() )
                        {
@@ -1111,7 +1112,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                         collecting.gvars->groups().back().variables().push_back( collect_variable() );
                         //DBGLOG("    Variable {}: {}\n", collecting.gvars->groups().back().variables().back().name(), collecting.gvars->groups().back().variables().back().descr())
                         // Check if a value was needed
-                        if( collecting.var_value_needed && !collecting.gvars->groups().back().variables().back().has_value() ) throw dlg::error("Value not specified for variable \"{}\"", collecting.gvars->groups().back().variables().back().name());
+                        if( collecting.var_value_needed && !collecting.gvars->groups().back().variables().back().has_value() ) throw fmtstr::error("Value not specified for variable \"{}\"", collecting.gvars->groups().back().variables().back().name());
                        }
                     break; // STS::GLOBALVARS
 
@@ -1123,7 +1124,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                     //    EN_NAME: ( { DE:"descr" } VAL1 := 0, { DE:"elem descr" } ... );
                     //    END_TYPE
                     skip_blanks();
-                    if(i>=siz) throw dlg::error("TYPE not closed by END_TYPE");
+                    if(i>=siz) throw fmtstr::error("TYPE not closed by END_TYPE");
                     else if( eat_line_end() ) continue;
                     else if( eat_token("END_TYPE"sv) )
                        {
@@ -1142,7 +1143,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                            {
                             // Expected a colon after the name
                             skip_blanks();
-                            if( i>=siz || buf[i]!=':' ) throw dlg::error("Missing \':\' after type name \"{}\"", type_name);
+                            if( i>=siz || buf[i]!=':' ) throw fmtstr::error("Missing \':\' after type name \"{}\"", type_name);
                             ++i; // Skip ':'
                             // Check what it is (struct, typedef, enum, subrange)
                             skip_blanks();
@@ -1246,7 +1247,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
        }
     catch(std::exception& e)
        {
-        throw dlg::parse_error(e.what(), line, i);
+        throw fmtstr::parse_error(e.what(), line, i);
        }
     #undef notify_error
 }

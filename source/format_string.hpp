@@ -1,5 +1,5 @@
-#ifndef logging_hpp
-#define logging_hpp
+#ifndef GUARD_format_string_hpp
+#define GUARD_format_string_hpp
 /*  ---------------------------------------------
     ©2021 matteo.gattanini@gmail.com
 
@@ -17,17 +17,8 @@
 //#include <iostream>
 
 
-  // Debug facility
-  #ifdef _DEBUG
-    #define DBGLOG(...) fmt::print(fg(fmt::color::aquamarine) | fmt::emphasis::italic, __VA_ARGS__);
-  #else
-    #define DBGLOG(...)
-  #endif
-
-
-
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-namespace dlg
+namespace fmtstr
 {
     
 //---------------------------------------------------------------------------

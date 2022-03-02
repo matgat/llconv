@@ -1,5 +1,5 @@
-#ifndef plclib_writer_hpp
-#define plclib_writer_hpp
+#ifndef GUARD_plclib_writer_hpp
+#define GUARD_plclib_writer_hpp
 /*  ---------------------------------------------
     ©2021-2022 matteo.gattanini@gmail.com
 
@@ -86,6 +86,8 @@ class Version
 // Write variable to plclib file
 inline void write(const sys::file_write& f, const plcb::Variable& var, const std::string_view tag, const std::string_view ind)
 {
+    assert( !var.name().empty() );
+
     f<< ind << "<"sv << tag << " name=\""sv << var.name() << "\" type=\""sv << var.type() << "\""sv;
 
     if( var.has_length() ) f<< " length=\""sv << std::to_string(var.length()) << "\""sv;
@@ -232,7 +234,7 @@ inline void write(const sys::file_write& f, const plcb::Macro& macro, const std:
 // Write library to plclib file
 void write(const sys::file_write& f, const plcb::Library& lib, const str::keyvals& options)
 {
-    // . Check options
+    // [Options]
     // Get possible schema version
     Version schema_ver;
     auto schema_ver_str = options.value_of("schema-ver");
@@ -243,9 +245,9 @@ void write(const sys::file_write& f, const plcb::Library& lib, const str::keyval
 
     // [Heading]
     f << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n"sv
-        << "<plcLibrary schemaVersion=\""sv << schema_ver.to_str() << "\">\n"sv
-        << "\t<lib version=\""sv << lib.version() << "\" name=\""sv << lib.name() << "\" fullXml=\"true\">\n"sv
-        << "\t\t<descr>"sv << lib.descr() << "</descr>\n"sv;
+      << "<plcLibrary schemaVersion=\""sv << schema_ver.to_str() << "\">\n"sv
+      << "\t<lib version=\""sv << lib.version() << "\" name=\""sv << lib.name() << "\" fullXml=\"true\">\n"sv
+      << "\t\t<descr>"sv << lib.descr() << "</descr>\n"sv;
 
     // [Workspace]
     f<< "\t\t<libWorkspace>\n"sv;

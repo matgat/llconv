@@ -1,5 +1,5 @@
-#ifndef plc_elements_hpp
-#define plc_elements_hpp
+#ifndef GUARD_plc_elements_hpp
+#define GUARD_plc_elements_hpp
 /*  ---------------------------------------------
     ©2021-2022 matteo.gattanini@gmail.com
 
@@ -21,38 +21,40 @@
 
 #include "string-utilities.hpp" // str::as_num
 
+using namespace std::literals; // "..."sv
 
 
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 namespace plc //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 {
 
-    //-----------------------------------------------------------------------
-    // Tell if a string is a recognized numerical type
-    constexpr bool is_num_type(const std::string_view s)
-       {
-        // Built in numeric types
-        constexpr std::array<std::string_view,16> num_types =
-           {
-            "BOOL"sv,   // [1] BOOLean [FALSE|TRUE]
-            "SINT"sv,   // [1] Short INTeger [-128 … +127]
-            "INT"sv,    // [2] INTeger [-32768 … +32767]
-            "DINT"sv,   // [4] Double [INTeger -2147483648 … +2147483647]
-            "LINT"sv,   // [8] Long INTeger [-2^63 … +2^63-1]
-            "USINT"sv,  // [1] Unsigned Short INTeger [0 … +255]
-            "UINT"sv,   // [2] Unsigned INTeger [0 … +65535]
-            "UDINT"sv,  // [4] Unsigned Double INTeger [0 … +4294967295]
-            "ULINT"sv,  // [8] Unsigned Long INTeger [0 … +2^64-1]
-            "REAL"sv,   // [4] REAL number [±10^+38]
-            "LREAL"sv,  // [8] Long REAL number [±10^+308]
-            "BOOL"sv,   // [1] 1 bit
-            "BYTE"sv,   // [1] 1 byte
-            "WORD"sv,   // [2] 2 bytes
-            "DWORD"sv,  // [4] 4 bytes
-            "LWORD"sv   // [8] 8 bytes
-           };
-        return std::ranges::find(num_types, s) != num_types.end();
-       }
+// Built in numeric types
+static constexpr std::array<std::string_view,16> num_types =
+   {
+    "BOOL"sv,   // [1] BOOLean [FALSE|TRUE]
+    "SINT"sv,   // [1] Short INTeger [-128 … +127]
+    "INT"sv,    // [2] INTeger [-32768 … +32767]
+    "DINT"sv,   // [4] Double [INTeger -2147483648 … +2147483647]
+    "LINT"sv,   // [8] Long INTeger [-2^63 … +2^63-1]
+    "USINT"sv,  // [1] Unsigned Short INTeger [0 … +255]
+    "UINT"sv,   // [2] Unsigned INTeger [0 … +65535]
+    "UDINT"sv,  // [4] Unsigned Double INTeger [0 … +4294967295]
+    "ULINT"sv,  // [8] Unsigned Long INTeger [0 … +2^64-1]
+    "REAL"sv,   // [4] REAL number [±10^+38]
+    "LREAL"sv,  // [8] Long REAL number [±10^+308]
+    "BOOL"sv,   // [1] 1 bit
+    "BYTE"sv,   // [1] 1 byte
+    "WORD"sv,   // [2] 2 bytes
+    "DWORD"sv,  // [4] 4 bytes
+    "LWORD"sv   // [8] 8 bytes
+   };
+
+//---------------------------------------------------------------------------
+// Tell if a string is a recognized numerical type
+constexpr bool is_num_type(const std::string_view s)
+   {
+    return std::ranges::find(num_types, s) != num_types.end();
+   }
 
 
 
@@ -101,13 +103,14 @@ class VariableAddress
 };
 
 
+//:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 namespace buf //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-{// Content refers to an external buffer
+{// Content that refers to an external buffer
 
 
 /////////////////////////////////////////////////////////////////////////////
 // A specific vendor directive
-class Directive /////////////////////////////////////////////////////////////
+class Directive
 {
  public:
     std::string_view key() const noexcept { return i_Key; }
@@ -129,7 +132,7 @@ class Directive /////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////
 // A variable declaration
-class Variable //////////////////////////////////////////////////////////////
+class Variable
 {
  public:
     std::string_view name() const noexcept { return i_Name; }
@@ -208,7 +211,7 @@ class Variables_Group ///////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////
 // A series of groups of variables
-class Variables_Groups //////////////////////////////////////////////////////
+class Variables_Groups
 {
  public:
     bool is_empty() const noexcept { return groups().empty(); }
@@ -242,7 +245,7 @@ class Variables_Groups //////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////
 // A struct
-class Struct ////////////////////////////////////////////////////////////////
+class Struct
 {
  public:
     std::string_view name() const noexcept { return i_Name; }
@@ -269,7 +272,7 @@ class Struct ////////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////
 // A type declaration
-class TypeDef ///////////////////////////////////////////////////////////////
+class TypeDef
 {
  public:
     explicit TypeDef(const Variable& var) : i_Name(var.name()),
@@ -319,7 +322,7 @@ class TypeDef ///////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////
 // Enumeration definition
-class Enum //////////////////////////////////////////////////////////////////
+class Enum
 {
  public:
     /////////////////////////////////////////////////////////////////////////
@@ -373,7 +376,7 @@ class Enum //////////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////
 // A subrange declaration
-class Subrange //////////////////////////////////////////////////////////////
+class Subrange
 {
  public:
     std::string_view name() const noexcept { return i_Name; }
@@ -415,7 +418,7 @@ class Subrange //////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////
 // Generic Program Organization Unit (program, function_block, function)
-class Pou ///////////////////////////////////////////////////////////////////
+class Pou
 {
  public:
     std::string_view name() const noexcept { return i_Name; }
@@ -488,7 +491,7 @@ class Pou ///////////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////
 // A macro expansion
-class Macro /////////////////////////////////////////////////////////////////
+class Macro
 {
  public:
     /////////////////////////////////////////////////////////////////////////
@@ -542,16 +545,17 @@ class Macro /////////////////////////////////////////////////////////////////
 
 
 /////////////////////////////////////////////////////////////////////////////
-// The whole data aggregate
-class Library ///////////////////////////////////////////////////////////////
+// The whole PLC library data aggregate
+class Library
 {
  public:
-    explicit Library(const std::string& nam) noexcept :
-                                    i_Name(nam),
-                                    i_Version("1.0.0"),
-                                    i_Description("PLC library"),
-                                    i_CreatDate(0),
-                                    i_ModifDate(0) {}
+    explicit Library(const std::string& nam) noexcept
+      : i_Name(nam)
+      , i_Version("1.0.0")
+      , i_Description("PLC library")
+      //, i_CreatDate(0)
+      //, i_ModifDate(0)
+      {}
 
     const std::string& name() const noexcept { return i_Name; }
 
@@ -562,10 +566,10 @@ class Library ///////////////////////////////////////////////////////////////
     void set_descr(const std::string_view s) noexcept { i_Description = s; }
     //bool has_descr() const noexcept { return !i_Descr.empty(); }
 
-    std::time_t creat_date() const noexcept { return i_CreatDate; }
-    std::time_t modif_date() const noexcept { return i_ModifDate; }
+    //std::time_t creat_date() const noexcept { return i_CreatDate; }
+    //std::time_t modif_date() const noexcept { return i_ModifDate; }
     //void set_dates(const std::tuple<std::time_t, std::time_t>& tuple) noexcept { auto& [ ct, mt ] = tuple; i_CreatDate=ct; i_ModifDate=mt; }
-    void set_dates(const std::time_t ct, const std::time_t mt) noexcept { i_CreatDate=ct; i_ModifDate=mt; }
+    //void set_dates(const std::time_t ct, const std::time_t mt) noexcept { i_CreatDate=ct; i_ModifDate=mt; }
 
 
     const Variables_Groups& global_constants() const noexcept { return i_GlobalConst; }
@@ -681,7 +685,7 @@ class Library ///////////////////////////////////////////////////////////////
     std::string i_Name;
     std::string i_Version;
     std::string i_Description;
-    std::time_t i_CreatDate, i_ModifDate;
+    //std::time_t i_CreatDate, i_ModifDate;
 
     Variables_Groups i_GlobalConst;
     Variables_Groups i_GlobalRetainVars;

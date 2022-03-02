@@ -11,11 +11,18 @@ VPATH += ../source/
 SOURCES += llconv.cpp
 
 HEADERS += \
-    system.hpp \
-    logging.hpp \
+    debug.hpp \
+    format_string.hpp \
+    h-parser.hpp \
+    keyvals.hpp \
     plc-elements.hpp \
+    plclib-writer.hpp \
     pll-parser.hpp \
-    plclib-writer.hpp
+    pll-writer.hpp \
+    sipro.hpp \
+    string-utilities.hpp \
+    system.hpp
+
 
 DEFINES -= UNICODE
 win32 {
@@ -25,7 +32,7 @@ win32 {
 
 win32-g++ {
     message(g++ $$QMAKESPEC)
-    QMAKE_CXXFLAGS += -O3 -Wextra -Wall -pedantic -funsigned-char
+    QMAKE_CXXFLAGS += -O3 -Wall -Wextra -pedantic -funsigned-char
     # Removing MinGW libstdc++-6.dll dependency and other dlls
     QMAKE_LFLAGS += -static -static-libgcc -static-libstdc++
     QMAKE_LFLAGS += -fno-rtti
