@@ -412,7 +412,7 @@ void delete_file(const std::string& pth) noexcept
 
 //---------------------------------------------------------------------------
 // glob("/aaa/bbb/*.txt");
-std::vector<fs::path> glob(const std::string_view str_pattern)
+std::vector<fs::path> file_glob(const std::string_view str_pattern)
 {
     const fs::path path_pattern = expand_env_variables( std::string(str_pattern) );
 

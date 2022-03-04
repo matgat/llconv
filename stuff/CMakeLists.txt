@@ -13,7 +13,7 @@ if (MSVC)
     add_compile_options(/W4 /O2 /utf-8 /J)
 else()
     # lots of warnings and all warnings as errors
-    add_compile_options(-Wall -Wextra -pedantic-errors -Werror -O3 -fno-rtti -funsigned-char)
+    add_compile_options(-Wall -Wextra -Wpedantic -Wconversion -Werror -O3 -fno-rtti -funsigned-char)
 endif()
 
 target_compile_features(llconv PUBLIC cxx_std_17)

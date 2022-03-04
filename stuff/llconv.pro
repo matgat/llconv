@@ -32,14 +32,14 @@ win32 {
 
 win32-g++ {
     message(g++ $$QMAKESPEC)
-    QMAKE_CXXFLAGS += -O3 -Wall -Wextra -pedantic -funsigned-char
+    QMAKE_CXXFLAGS += -O3 -Wall -Wextra -Wpedantic -Wconversion -funsigned-char
     # Removing MinGW libstdc++-6.dll dependency and other dlls
     QMAKE_LFLAGS += -static -static-libgcc -static-libstdc++
     QMAKE_LFLAGS += -fno-rtti
 
 } else:win32-clang-msvc {
     message(clang $$QMAKESPEC)
-    QMAKE_CXXFLAGS += -Weverything -Wno-c++98-compat -Wno-missing-prototypes
+    QMAKE_CXXFLAGS += -Weverything -Wno-c++98-compat -Wno-missing-prototypes -funsigned-char
 
 } else:win32-msvc* {
     message(msvc $$QMAKESPEC)

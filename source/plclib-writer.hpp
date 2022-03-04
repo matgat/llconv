@@ -88,10 +88,14 @@ inline void write(const sys::file_write& f, const plcb::Variable& var, const std
 {
     assert( !var.name().empty() );
 
-    f<< ind << "<"sv << tag << " name=\""sv << var.name() << "\" type=\""sv << var.type() << "\""sv;
+    f<< ind << '<' << tag << " name=\""sv << var.name() << "\" type=\""sv << var.type() << '\"';
 
-    if( var.has_length() ) f<< " length=\""sv << std::to_string(var.length()) << "\""sv;
-    if( var.is_array() ) f<< " dim0=\""sv << std::to_string(var.arraydim()) << "\""sv;
+    if( var.has_length() ) f<< " length=\""sv << std::to_string(var.length()) << '\"';
+    if( var.is_array() )
+       {
+        if( var.array_startidx()!=0u ) throw std::runtime_error(fmt::format("plclib doesn't support arrays with a not null start index in variable {}",var.name()));
+        f<< " dim0=\""sv << std::to_string(var.array_dim()) << '\"';
+       }
 
     if( var.has_descr() || var.has_value() || var.has_address() )
        {// Tag contains something
@@ -129,7 +133,7 @@ inline void write(const sys::file_write& f, const plcb::Variable& var, const std
 // Write POU to plclib file
 inline void write(const sys::file_write& f, const plcb::Pou& pou, const std::string_view tag, const std::string_view ind)
 {
-    f<< ind << "<"sv << tag << " name=\""sv << pou.name() << "\" version=\"1.0.0\" creationDate=\"0\" lastModifiedDate=\"0\" excludeFromBuild=\"FALSE\" excludeFromBuildIfNotDef=\"\">\n"sv;
+    f<< ind << '<' << tag << " name=\""sv << pou.name() << "\" version=\"1.0.0\" creationDate=\"0\" lastModifiedDate=\"0\" excludeFromBuild=\"FALSE\" excludeFromBuildIfNotDef=\"\">\n"sv;
     if( pou.has_descr() )
        {
         f<< ind << "\t<descr>"sv << pou.descr() << "</descr>\n"sv;
@@ -247,6 +251,7 @@ void write(const sys::file_write& f, const plcb::Library& lib, const str::keyval
     f << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n"sv
       << "<plcLibrary schemaVersion=\""sv << schema_ver.to_str() << "\">\n"sv
       << "\t<lib version=\""sv << lib.version() << "\" name=\""sv << lib.name() << "\" fullXml=\"true\">\n"sv
+      << "\t\t<!-- author=\"llconv plclib::write()\" date=\""sv << sys::human_readable_time_stamp() << "\" -->\n"sv
       << "\t\t<descr>"sv << lib.descr() << "</descr>\n"sv;
 
     // [Workspace]
@@ -445,9 +450,13 @@ void write(const sys::file_write& f, const plcb::Library& lib, const str::keyval
         f<< "\t\t<typedefs>\n"sv;
         for( const auto& tdef : lib.typedefs() )
            {
-            f<< ind << "<typedef name=\""sv << tdef.name() << "\" type=\""sv << tdef.type() << "\""sv;
-            if( tdef.has_length() ) f<< " length=\""sv << std::to_string(tdef.length()) << "\""sv;
-            if( tdef.is_array() ) f<< " dim0=\""sv << std::to_string(tdef.arraydim()) << "\""sv;
+            f<< ind << "<typedef name=\""sv << tdef.name() << "\" type=\""sv << tdef.type() << '\"';
+            if( tdef.has_length() ) f<< " length=\""sv << std::to_string(tdef.length()) << '\"';
+            if( tdef.is_array() )
+               {
+                if( tdef.array_startidx()!=0u ) throw std::runtime_error(fmt::format("plclib doesn't support arrays with a not null start index in typedef {}",tdef.name()));
+                f<< " dim0=\""sv << std::to_string(tdef.array_dim()) << '\"';
+               }
             f<< ">\n"sv;
             f<< ind << "\t<iecDeclaration active=\"FALSE\"/>\n"sv;
             f<< ind << "\t<descr>"sv << tdef.descr() << "</descr>\n"sv;
@@ -493,7 +502,7 @@ void write(const sys::file_write& f, const plcb::Library& lib, const str::keyval
         f<< "\t\t<subranges>\n"sv;
         for( const auto& subr : lib.subranges() )
            {
-            f<< ind << "<subrange name=\""sv << subr.name() << "\" version=\"1.0.0\" type=\""sv << subr.type() << "\">"sv;
+            f<< ind << "<subrange name=\""sv << subr.name() << "\" version=\"1.0.0\" type=\""sv << subr.type() << "\">\n"sv;
             //f<< ind << "\t<title>"sv << subr.title() << "</title>\n"sv;
             f<< ind << "\t<descr>"sv << subr.descr() << "</descr>\n"sv;
             f<< ind << "\t<minValue>"sv << std::to_string(subr.min_value()) << "</minValue>\n"sv;
@@ -524,66 +533,6 @@ void write(const sys::file_write& f, const plcb::Library& lib, const str::keyval
     f<< "\t</lib>\n"sv
      << "</plcLibrary>\n"sv;
 }
-
-
-
-//---------------------------------------------------------------------------
-//void list(const sys::file_write& f, const plcb::Library& lib, const int ver)
-//{
-//    f << "\nglobal vars:\n"sv;
-//    for( const auto& group : lib.global_variables().groups() )
-//       {
-//        f << "    \""sv << group.name() << "\"\n"sv;
-//        for( const auto& var : group.variables() )
-//           {
-//            f << "        "sv << var.name() << '\n';
-//           }
-//       }
-//
-//    f << "\nPrograms:\n"sv;
-//    for( const auto& pou : lib.programs() )
-//       {
-//        f << "    "sv << pou.name() << '\n';
-//       }
-//
-//    f << "\nFunction blocks:\n"sv;
-//    for( const auto& pou : lib.function_blocks() )
-//       {
-//        f << "    "sv << pou.name() << '\n';
-//       }
-//
-//    f << "\nFunctions:\n"sv;
-//    for( const auto& pou : lib.functions() )
-//       {
-//        f << "    "sv << pou.name() << ':'  << pou.return_type() <<  '\n';
-//       }
-//
-//    f << "\ntypedefs:\n"sv;
-//    for( const auto& tdef : lib.typedefs() )
-//       {
-//        f << "    "sv << tdef.name() << '\n';
-//       }
-//
-//    f << "\nenums:\n"sv;
-//    for( const auto& en : lib.enums() )
-//       {
-//        f << "    "sv << en.name() << '\n';
-//        for( const auto& elem : en.elements() )
-//           {
-//            f << "        "sv << elem.name() << '\n';
-//           }
-//       }
-//
-//    f << "\nmacros:\n"sv;
-//    for( const auto& macro : lib.macros() )
-//       {
-//        f << "    "sv << macro.name() << '\n';
-//        for( const auto& par : macro.parameters() )
-//           {
-//            f << "        "sv << par.name() << '\n';
-//           }
-//       }
-//}
 
 
 }//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::

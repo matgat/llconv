@@ -42,10 +42,10 @@ EX_01_LB=
 EX_01_CM=
 EX_01_WD=
 C++FT_00_LB=_Compile
-C++FT_00_CM=g++ -std=c++2b -Wall -Wextra -c "%f"
+C++FT_00_CM=g++ -std=c++2b -funsigned-char -Wall -Wextra -Wpedantic -Wconversion -c "%f"
 C++FT_00_WD=
 C++FT_01_LB=_Build
-C++FT_01_CM=g++ -std=c++2b -O3 -o "llconv" "llconv.cpp"
+C++FT_01_CM=g++ -std=c++2b -funsigned-char -Wall -Wextra -Wpedantic -Wconversion -O3 -DFMT_HEADER_ONLY -Isource/fmt/include -o "llconv" "llconv.cpp"
 C++FT_01_WD=
 C++FT_02_LB=_Lint
 C++FT_02_CM=cppcheck --language=c++ --enable=warning,style --template=gcc "%f"

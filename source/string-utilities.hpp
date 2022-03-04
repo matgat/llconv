@@ -189,6 +189,7 @@ std::size_t hash(const std::string_view s)
 std::string iso_latin1_to_utf8(const std::string_view ansi)
 {
     std::string utf8;
+    utf8.reserve( (3 * ansi.size()) / 2 );
     for( std::size_t i=0; i<ansi.size(); ++i )
        {
         if(ansi[i] < 128)

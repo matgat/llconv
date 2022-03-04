@@ -56,28 +56,16 @@ namespace pll
 // Write variable to pll file
 inline void write(const sys::file_write& f, const plcb::Variable& var)
 {
-    //  vaProjName     AT %MB700.0    : STRING[ 80 ]; {DE:"va0    - Nome progetto caricato"}
-    //  vbHeartBeat    AT %MB300.2    : BOOL;         {DE:"vb2    - Battito di vita ogni secondo"}
-    //  vnAlgn_Seq     AT %MW400.860  : INT;          {DE:"vn860  - Stato/risultato sequenze riscontri 'ID_ALGN'"}
-    //  vqProd_X       AT %MD500.977  : DINT;         {DE:"vq977  - Posizione bordo avanti del prodotto [mm]"}
-    //  vdPlcScanTime  AT %ML600.0    : LREAL;        {DE:"vd0    - Tempo di scansione del PLC [s]"}
-    //  vdJobDate      AT %ML600.253  : LREAL;        {DE:"vd253  - Timestamp of last job start"}
-
-    // RET_ABORTED        : INT := -1; { DE:"Return: Program not completed" }
-    // BIT_CHS_CANTSTART  : UINT := 8192; { DE:"Stato Ch bit13: impossibile avviare il ciclo automatico per allarmi presenti o CMDA richiesto non attivo" }
-    // NO_POS_UM          : DINT := 999999999; { DE:"Invalid quote [um]" }
-    // SW_VER             : LREAL := 23.90; { DE:"Versione delle definizioni" }
-
     assert( !var.name().empty() );
 
-    f<< "\t"sv << var.name(); // Exception!!
+    f<< '\t' << var.name(); // Exception!!
 
     if( var.has_address() )
        {
         f<< " AT %"sv << var.address().type()
                       << var.address().typevar()
                       << std::to_string(var.address().index())
-                      << "."sv
+                      << '.'
                       << std::to_string(var.address().subindex());
        }
 
@@ -89,7 +77,7 @@ inline void write(const sys::file_write& f, const plcb::Variable& var)
        }
     else if( var.is_array() )
        {// ARRAY[ 0..999 ] OF BOOL
-        f<< "ARRAY[ 0.."sv << std::to_string(var.arraydim()-1u) << " ] OF "sv << var.type();
+        f<< "ARRAY[ "sv << std::to_string(var.array_startidx()) << ".."sv << std::to_string(var.array_lastidx()) << " ] OF "sv << var.type();
        }
     else
        {// DINT
@@ -101,12 +89,105 @@ inline void write(const sys::file_write& f, const plcb::Variable& var)
         f<< " := "sv << var.value();
        }
 
-    f<< ";"sv;
+    f<< ';';
 
     if( var.has_descr() )
        {
         f<< " { DE:\""sv << var.descr() << "\" }\n"sv;
        }
+}
+
+
+
+//---------------------------------------------------------------------------
+// Write POU to pll file
+inline void write(const sys::file_write& f, const plcb::Pou& pou, const std::string_view tag)
+{
+    f << '\n' << tag << ' ' << pou.name();
+    if( pou.has_return_type() )
+       {
+        f << " : "sv << pou.return_type();
+       }
+    f<< '\n';
+
+    if( pou.has_descr() )
+       {
+        f << "\n{ DE:\""sv << pou.descr() << "\" }\n"sv;
+       }
+
+    // [Variables]
+    if( !pou.inout_vars().empty() )
+       {
+        f << "\n\tVAR_IN_OUT\n"sv;
+        for( const auto& var : pou.inout_vars() ) write(f, var);
+        f << "\tEND_VAR\n"sv;
+       }
+    if( !pou.input_vars().empty() )
+       {
+        f << "\n\tVAR_INPUT\n"sv;
+        for( const auto& var : pou.input_vars() ) write(f, var);
+        f << "\tEND_VAR\n"sv;
+       }
+    if( !pou.output_vars().empty() )
+       {
+        f << "\n\tVAR_OUTPUT\n"sv;
+        for( const auto& var : pou.output_vars() ) write(f, var);
+        f << "\tEND_VAR\n"sv;
+       }
+    if( !pou.external_vars().empty() )
+       {
+        f << "\n\tVAR_EXTERNAL\n"sv;
+        for( const auto& var : pou.external_vars() ) write(f, var);
+        f << "\tEND_VAR\n"sv;
+       }
+    if( !pou.local_vars().empty() )
+       {
+        f << "\n\tVAR\n"sv;
+        for( const auto& var : pou.local_vars() ) write(f, var);
+        f << "\tEND_VAR\n"sv;
+       }
+    if( !pou.local_constants().empty() )
+       {
+        f << "\n\tVAR CONSTANT\n"sv;
+        for( const auto& var : pou.local_constants() ) write(f, var);
+        f << "\tEND_VAR\n"sv;
+       }
+
+    // [Body]
+    f << "\n\t{ CODE:"sv << pou.code_type() << " }"sv
+      << pou.body();
+    if( !pou.body().ends_with('\n') ) f << '\n';
+    f << "END_"sv << tag << "\n\n"sv;
+}
+
+
+//---------------------------------------------------------------------------
+// Write macro to plclib file
+inline void write(const sys::file_write& f, const plcb::Macro& macro)
+{
+    f << "\nMACRO "sv << macro.name() << '\n';
+
+    if( macro.has_descr() )
+       {
+        f << "{ DE:\""sv << macro.descr() << "\" }\n"sv;
+       }
+
+    // [Parameters]
+    if( !macro.parameters().empty() )
+       {
+        f << "\n\tPAR_MACRO\n"sv;
+        for( const auto& par : macro.parameters() )
+           {
+            f << '\t' << par.name() << "; { DE:\""sv << par.descr() << "\" }\n"sv;
+           }
+        f << "\tEND_PAR\n"sv;
+       }
+
+    // [Body]
+    f << "\n\t{ CODE:"sv << macro.code_type() << " }"sv
+      << macro.body();
+    if( !macro.body().ends_with('\n') ) f << '\n';
+    f << "END_MACRO\n\n"sv;
 }
 
 
@@ -116,41 +197,44 @@ void write(const sys::file_write& f, const plcb::Library& lib, [[maybe_unused]] 
 {
     // [Options]
     //auto xxx = options.value_of("xxx");
+    const std::string_view sects_spacer = "\n\n\n"sv;
+    const std::string_view blocks_spacer = "\n\n"sv;
 
     // [Heading]
     f<< "(*\n"sv
-     << "    name: "sv << lib.name() << "\n"sv
-     << "    descr: "sv << lib.descr() << "\n"sv
-     << "    version: "sv << lib.version() << "\n"sv
-     << "    author: pll::write()\n"sv
-     << "    date: "sv << sys::human_readable_time_stamp() << "\n"sv
-     << "*)\n\n\n"sv;
+     << "    name: "sv << lib.name() << '\n'
+     << "    descr: "sv << lib.descr() << '\n'
+     << "    version: "sv << lib.version() << '\n'
+     << "    author: llconv pll::write()\n"sv
+     << "    date: "sv << sys::human_readable_time_stamp() << '\n'
+     << "*)\n"sv;
 
     // [Content summary]
     //f<< "(*\n"sv
-    // << "    global constants: "sv << std::to_string(lib.global_constants().size())  << "\n"sv
-    // << "    global retain vars: "sv << std::to_string(lib.global_retainvars().size())  << "\n"sv
-    // << "    global variables: "sv << std::to_string(lib.global_variables().size())  << "\n"sv
-    // << "    function blocks: "sv << std::to_string(lib.function_blocks().size())  << "\n"sv
-    // << "    functions: "sv << std::to_string(lib.functions().size())  << "\n"sv
-    // << "    programs: "sv << std::to_string(lib.programs().size())  << "\n"sv
-    // << "    macros: "sv << std::to_string(lib.macros().size())  << "\n"sv
-    // << "    structs: "sv << std::to_string(lib.structs().size())  << "\n"sv
-    // << "    typedefs: "sv << std::to_string(lib.typedefs().size())  << "\n"sv
-    // << "    enums: "sv << std::to_string(lib.enums().size())  << "\n"sv
-    // << "    subranges: "sv << std::to_string(lib.subranges().size())  << "\n"sv
-    // //<< "    interfaces: "sv << std::to_string(lib.interfaces().size())  << "\n"sv
+    // << "    global constants: "sv << std::to_string(lib.global_constants().size())  << '\n'
+    // << "    global retain vars: "sv << std::to_string(lib.global_retainvars().size())  << '\n'
+    // << "    global variables: "sv << std::to_string(lib.global_variables().size())  << '\n'
+    // << "    function blocks: "sv << std::to_string(lib.function_blocks().size())  << '\n'
+    // << "    functions: "sv << std::to_string(lib.functions().size())  << '\n'
+    // << "    programs: "sv << std::to_string(lib.programs().size())  << '\n'
+    // << "    macros: "sv << std::to_string(lib.macros().size())  << '\n'
+    // << "    structs: "sv << std::to_string(lib.structs().size())  << '\n'
+    // << "    typedefs: "sv << std::to_string(lib.typedefs().size())  << '\n'
+    // << "    enums: "sv << std::to_string(lib.enums().size())  << '\n'
+    // << "    subranges: "sv << std::to_string(lib.subranges().size())  << '\n'
+    // //<< "    interfaces: "sv << std::to_string(lib.interfaces().size())  << '\n'
     // << "*)\n"sv;
 
     // [Global variables]
     if( !lib.global_variables().is_empty() )
        {
-        f<< "\t(****************************)\n"
+        f<< sects_spacer <<
+            "\t(****************************)\n"
             "\t(*                          *)\n"
             "\t(*     GLOBAL VARIABLES     *)\n"
             "\t(*                          *)\n"
-            "\t(****************************)\n"
-            "\n"
+            "\t(****************************)\n"sv;
+        f<< blocks_spacer <<
             "\tVAR_GLOBAL\n"sv;
         for( const auto& group : lib.global_variables().groups() )
            {
@@ -162,112 +246,223 @@ void write(const sys::file_write& f, const plcb::Library& lib, [[maybe_unused]] 
             if( !group.name().empty() ) f << "\t{G:\""sv << group.name() << "\"}\n"sv;
             for( const auto& var : group.variables() ) write(f, var);
            }
-        f<< "\tEND_VAR\n\n\n"sv;
+        f<< "\tEND_VAR\n"sv;
        }
 
     // [Global constants]
     if( !lib.global_constants().is_empty() )
        {
-        f<< "\t(****************************)\n"
+        f<< sects_spacer <<
+            "\t(****************************)\n"
             "\t(*                          *)\n"
             "\t(*     GLOBAL CONSTANTS     *)\n"
             "\t(*                          *)\n"
-            "\t(****************************)\n"
-            "\n"
+            "\t(****************************)\n"sv;
+        f<< blocks_spacer <<
             "\tVAR_GLOBAL CONSTANT\n"sv;
         for( const auto& group : lib.global_constants().groups() )
            {
             if( !group.name().empty() ) f << "\t{G:\""sv << group.name() << "\"}\n"sv;
             for( const auto& var : group.variables() ) write(f, var);
            }
-        f<< "\tEND_VAR\n\n\n"sv;
+        f<< "\tEND_VAR\n"sv;
        }
 
     // [Functions]
     if( !lib.functions().empty() )
        {
-        throw std::runtime_error("pll::write(): functions not yet supported");
-        //for( const auto& pou : lib.functions() ) write(f, pou, "function"sv);
+        f<< sects_spacer <<
+            "\t(*********************)\n"
+            "\t(*                   *)\n"
+            "\t(*     FUNCTIONS     *)\n"
+            "\t(*                   *)\n"
+            "\t(*********************)\n"sv;
+        for( const auto& pou : lib.functions() )
+           {
+            f<< blocks_spacer;
+            write(f, pou, "FUNCTION"sv);
+           }
        }
 
     // [FunctionBlocks]
     if( !lib.function_blocks().empty() )
        {
-        throw std::runtime_error("pll::write(): function blocks not yet supported");
-        //for( const auto& pou : lib.function_blocks() ) write(f, pou, "functionBlock"sv);
+        f<< sects_spacer <<
+            "\t(***************************)\n"
+            "\t(*                         *)\n"
+            "\t(*     FUNCTION BLOCKS     *)\n"
+            "\t(*                         *)\n"
+            "\t(***************************)\n"sv;
+        for( const auto& pou : lib.function_blocks() )
+           {
+            f<< blocks_spacer;
+            write(f, pou, "FUNCTION_BLOCK"sv);
+           }
        }
 
     // [Programs]
     if( !lib.programs().empty() )
        {
-        throw std::runtime_error("pll::write(): programs not yet supported");
-        //for( const auto& pou : lib.programs() ) write(f, pou, "program"sv,);
+        f<< sects_spacer <<
+            "\t(********************)\n"
+            "\t(*                  *)\n"
+            "\t(*     PROGRAMS     *)\n"
+            "\t(*                  *)\n"
+            "\t(********************)\n"sv;
+        for( const auto& pou : lib.programs() )
+           {
+            f<< blocks_spacer;
+            write(f, pou, "PROGRAM"sv);
+           }
        }
 
     // [Macros]
     if( !lib.macros().empty() )
        {
-        throw std::runtime_error("pll::write(): macros not yet supported");
-        //for( const auto& macro : lib.macros() ) write(f, macro,);
+        f<< sects_spacer <<
+            "\t(********************)\n"
+            "\t(*                  *)\n"
+            "\t(*      MACROS      *)\n"
+            "\t(*                  *)\n"
+            "\t(********************)\n"
+            "\n"sv;
+        for( const auto& macro : lib.macros() )
+           {
+            f<< blocks_spacer;
+            write(f, macro);
+           }
        }
 
     // [Structs]
     if( !lib.structs().empty() )
        {
-        throw std::runtime_error("pll::write(): structs not yet supported");
-        //for( const auto& strct : lib.structs() )
-        //   {
-        //    f<< "\t"sv << strct.name() << " "sv << strct.descr() << "\n"sv;
-        //    for( const auto& var : strct.members() )
-        //       {
-        //        //f<< "\t"sv << var.name() << " "sv << var.type() << " "sv << var.descr() << "\n"sv
-        //       }
-        //   }
+        f<< sects_spacer <<
+            "\t(*******************)\n"
+            "\t(*                 *)\n"
+            "\t(*     STRUCTS     *)\n"
+            "\t(*                 *)\n"
+            "\t(*******************)\n"sv;
+        f<< blocks_spacer <<
+            "TYPE\n\n"sv;
+        for( const auto& strct : lib.structs() )
+           {
+            f<< '\t' << strct.name() << " : STRUCT"sv;
+            if(!strct.descr().empty()) f<< " { DE:\""sv << strct.descr() << "\" }"sv;
+            f<< '\n';
+            for( const auto& var : strct.members() )
+               {
+                f<< "\t\t"sv << var.name() << " : "sv << var.type() << ';';
+                if(!var.descr().empty()) f<< " { DE:\""sv << var.descr() << "\" }"sv;
+                f<< '\n';
+               }
+            f<< "\tEND_STRUCT;\n\n"sv;
+           }
+        f<< "\nEND_TYPE\n"sv;
        }
 
     // [Typedefs]
     if( !lib.typedefs().empty() )
        {
-        throw std::runtime_error("pll::write(): structs not yet supported");
-        //for( const auto& tdef : lib.typedefs() )
-        //   {
-        //    f<< "\t"sv << tdef.name() << " "sv << tdef.type() << "\""sv;
-        //    if( tdef.has_length() ) f<< " "sv << std::to_string(tdef.length()) << "\n"sv;
-        //    if( tdef.is_array() ) f<< " "sv << std::to_string(tdef.arraydim()) << "\n"sv;
-        //    f<< " "sv << tdef.descr() << "\n"sv;
-        //   }
+        f<< sects_spacer <<
+            "\t(********************)\n"
+            "\t(*                  *)\n"
+            "\t(*     TYPEDEFS     *)\n"
+            "\t(*                  *)\n"
+            "\t(********************)\n"sv;
+        f<< blocks_spacer <<
+            "TYPE\n\n"sv;
+        for( const auto& tdef : lib.typedefs() )
+           {
+            f<< '\t' << tdef.name() << " : "sv;
+
+            if( tdef.has_length() )
+               {// STRING[ 80 ]
+                f<< tdef.type() << "[ "sv << std::to_string(tdef.length()) << " ]"sv;
+               }
+            else if( tdef.is_array() )
+               {// ARRAY[ 0..999 ] OF BOOL
+                f<< "ARRAY[ "sv << std::to_string(tdef.array_startidx()) << ".."sv << std::to_string(tdef.array_lastidx()) << " ] OF "sv << tdef.type();
+               }
+            else
+               {// DINT
+                f<< tdef.type();
+               }
+            f<< ';';
+
+            if(!tdef.descr().empty()) f<< " { DE:\""sv << tdef.descr() << "\" }"sv;
+            f<< '\n';
+           }
+        f<< "\nEND_TYPE\n"sv;
        }
 
     // [Enums]
     if( !lib.enums().empty() )
        {
-        throw std::runtime_error("pll::write(): enums not yet supported");
-        //for( const auto& en : lib.enums() )
-        //   {
-        //    //f<< "\t"sv << en.name() << ""sv << en.descr() << "\n"sv;
-        //    for( const auto& elem : en.elements() )
-        //       {
-        //        f<< "\t"sv << elem.name() << " "sv << elem.descr() << " "sv << elem.value() << "\n"sv
-        //       }
-        //   }
+        f<< sects_spacer <<
+            "\t(*****************)\n"
+            "\t(*               *)\n"
+            "\t(*     ENUMS     *)\n"
+            "\t(*               *)\n"
+            "\t(*****************)\n"sv;
+        f<< blocks_spacer <<
+            "TYPE\n\n"sv;
+        for( const auto& en : lib.enums() )
+           {
+            f<< "\n\t"sv << en.name() << ": (\n"sv;
+            if(!en.descr().empty()) f<< "\t\t{ DE:\""sv << en.descr() << "\" }\n"sv;
+            if( !en.elements().empty() )
+               {
+                const auto ie_last = std::prev( en.elements().cend() );
+                for( auto ie=en.elements().cbegin(); ie!=ie_last; ++ie )
+                   {
+                    f<< "\t\t"sv << ie->name() << " := "sv << ie->value() << ',';
+                    if(!ie->descr().empty()) f<< " { DE:\""sv << ie->descr() << "\" }"sv;
+                    f<< '\n';
+                   }
+                // Last element
+                f<< "\t\t"sv << ie_last->name() << " := "sv << ie_last->value();
+                if(!ie_last->descr().empty()) f<< " { DE:\""sv << ie_last->descr() << "\" }"sv;
+                f<< '\n';
+               }
+            f<< "\t);\n"sv;
+           }
+        f<< "\nEND_TYPE\n"sv;
        }
 
     // [Subranges]
     if( !lib.subranges().empty() )
        {
-        throw std::runtime_error("pll::write(): subranges not yet supported");
-        //for( const auto& subr : lib.subranges() )
-        //   {
-        //    f<< "\t"sv << subr.name() << " "sv << subr.type() << " "sv << subr.descr() << "\n"sv;
-        //     << " "sv << std::to_string(subr.min_value()) << " "sv << std::to_string(subr.max_value()) << "\n"sv;
-        //   }
+        f<< sects_spacer <<
+            "\t(*********************)\n"
+            "\t(*                   *)\n"
+            "\t(*     SUBRANGES     *)\n"
+            "\t(*                   *)\n"
+            "\t(*********************)\n"sv;
+        f<< blocks_spacer <<
+            "TYPE\n\n"sv;
+        for( const auto& subr : lib.subranges() )
+           {
+            f<< '\t' << subr.name() << " : "sv << subr.type()
+             << " ("sv << std::to_string(subr.min_value()) << ".."sv << std::to_string(subr.max_value()) << ");"sv;
+            if(!subr.descr().empty()) f<< " { DE:\""sv << subr.descr() << "\" }"sv;
+            f<< '\n';
+           }
+        f<< "\nEND_TYPE\n"sv;
        }
 
     // [Interfaces]
     //if( !lib.interfaces().empty() )
     //   {
-    //    throw std::runtime_error("pll::write(): interfaces not yet supported");
-    //    //for( const auto& intfc : lib.interfaces() ) write(f, intfc);
+    //    f<< sects_spacer <<
+    //        "\t(**********************)\n"
+    //        "\t(*                    *)\n"
+    //        "\t(*     INTERFACES     *)\n"
+    //        "\t(*                    *)\n"
+    //        "\t(**********************)\n"sv;
+    //    for( const auto& intfc : lib.interfaces() )
+    //       {
+    //        write(f, intfc);
+    //       }
     //   }
 }
 

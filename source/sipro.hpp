@@ -110,18 +110,18 @@ class Register
            }
        }
 
-    constexpr std::uint16_t index() const noexcept { return i_index; }
-    //constexpr en_regtype type() const noexcept { return i_type; }
+    [[nodiscard]] constexpr std::uint16_t index() const noexcept { return i_index; }
+    //[[nodiscard]] constexpr en_regtype type() const noexcept { return i_type; }
 
-    constexpr bool is_valid() const noexcept { return i_type!=type_none; }
-    constexpr bool is_va() const noexcept { return i_type==type_va; }
+    [[nodiscard]] constexpr bool is_valid() const noexcept { return i_type!=type_none; }
+    [[nodiscard]] constexpr bool is_va() const noexcept { return i_type==type_va; }
 
-    constexpr std::uint16_t get_va_length() const noexcept { return 80; }
+    [[nodiscard]] constexpr std::uint16_t get_va_length() const noexcept { return 80; }
 
-    constexpr std::string_view iec_type() const noexcept { return reg_iec_types[i_type]; }
-    constexpr char iec_address_type() const noexcept { return 'M'; }
-    constexpr char iec_address_vartype() const noexcept { return plc_var_type[i_type]; }
-    constexpr std::uint16_t iec_address_index() const noexcept { return plc_var_address[i_type]; }
+    [[nodiscard]] constexpr std::string_view iec_type() const noexcept { return reg_iec_types[i_type]; }
+    [[nodiscard]] constexpr char iec_address_type() const noexcept { return 'M'; }
+    [[nodiscard]] constexpr char iec_address_vartype() const noexcept { return plc_var_type[i_type]; }
+    [[nodiscard]] constexpr std::uint16_t iec_address_index() const noexcept { return plc_var_address[i_type]; }
 
  private:
     std::uint16_t i_index = 0;

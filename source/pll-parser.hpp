@@ -111,7 +111,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
     auto skip_line = [&]() noexcept -> std::string_view
        {
         const std::size_t i_start = i;
-        while( i<siz && !eat_line_end() ) ++i;
+        while( !eat_line_end() ) ++i;
         return std::string_view(buf.data()+i_start, i-i_start);
        };
 
@@ -210,11 +210,49 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
     auto extract_index = [&]() -> std::size_t
        {
         if( i>=siz ) throw fmtstr::error("Index not found");
-        if( buf[i]=='+' ) ++i; // sign = 1;
-        else if( buf[i]=='-' ) throw fmtstr::error("Negative index"); // {sign = -1; ++i;}
-        if( !std::isdigit(buf[i]) ) throw fmtstr::error("Invalid index");
+        if( buf[i]=='+' )
+           {
+            ++i;
+            if( i>=siz ) throw fmtstr::error("Invalid index \'+\'");
+           }
+        else if( buf[i]=='-' )
+           {
+            throw fmtstr::error("Negative index");
+           }
+        if( !std::isdigit(buf[i]) )
+           {
+            throw fmtstr::error("Invalid char \'{}\' in index", buf[i]);
+           }
         std::size_t result = (buf[i]-'0');
         const std::size_t base = 10u;
+        while( ++i<siz && std::isdigit(buf[i]) ) result = (base*result) + (buf[i]-'0');
+        return result;
+       };
+
+    //---------------------------------
+    // Read a (base10) integer literal
+    auto extract_integer = [&]() -> int
+       {
+        if( i>=siz ) throw fmtstr::error("No integer found");
+        int sign = 1;
+        if( buf[i]=='+' )
+           {
+            //sign = 1;
+            ++i;
+            if( i>=siz ) throw fmtstr::error("Invalid integer \'+\'");
+           }
+        else if( buf[i]=='-' )
+           {
+            sign = -1;
+            ++i;
+            if( i>=siz ) throw fmtstr::error("Invalid integer \'-\'");
+           }
+        if( !std::isdigit(buf[i]) )
+           {
+            throw fmtstr::error("Invalid char \'{}\' in integer", buf[i]);
+           }
+        int result = (buf[i]-'0');
+        const int base = 10;
         while( ++i<siz && std::isdigit(buf[i]) ) result = (base*result) + (buf[i]-'0');
         return result;
        };
@@ -454,7 +492,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         skip_blanks();
         if( is_directive() )
            {
-            plcb::Directive dir = collect_directive();
+            const plcb::Directive dir = collect_directive();
             if( dir.key() == "DE"sv ) par.set_descr( dir.value() );
             else notify_error("Unexpected directive \"{}\" in macro parameter", dir.key());
            }
@@ -477,22 +515,20 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             skip_blanks();
             if( i>=siz || buf[i]!='[' ) throw fmtstr::error("Expected \'[\' in array variable \"{}\"", var.name());
             ++i; // Skip '['
-            // TODO: collect array dimensions (multidimensional: dim0, dim1, dim2)
             skip_blanks();
-            const std::size_t start_idx = extract_index();
-            if( start_idx!=0u ) throw fmtstr::error("Invalid array start index ({}) of variable \"{}\"", start_idx, var.name());
+            const std::size_t idx_start = extract_index();
             skip_blanks();
             if( !eat_string(".."sv) ) throw fmtstr::error("Expected \"..\" in array index of variable \"{}\"", var.name());
             skip_blanks();
-            const std::size_t end_idx = extract_index();
-            if( end_idx < start_idx ) throw fmtstr::error("Invalid array indexes {}..{} of variable \"{}\"", start_idx, end_idx, var.name());
+            const std::size_t idx_last = extract_index();
             skip_blanks();
             if( i<siz && buf[i]==',' ) throw fmtstr::error("Multidimensional arrays not yet supported in variable \"{}\"", var.name());
+            // TODO: Collect array dimensions (multidimensional: dim0, dim1, dim2)
             if( i>=siz || buf[i]!=']' ) throw fmtstr::error("Expected \']\' in array variable \"{}\"", var.name());
             ++i; // Skip ']'
             skip_blanks();
             if( !eat_token("OF"sv) ) throw fmtstr::error("Expected \"OF\" in array variable \"{}\"", var.name());
-            var.set_arraydim( end_idx - start_idx + 1u );
+            var.set_array_range(idx_start, idx_last);
             skip_blanks();
            }
 
@@ -548,7 +584,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         skip_blanks();
         if( is_directive() )
            {
-            plcb::Directive dir = collect_directive();
+            const plcb::Directive dir = collect_directive();
             if( dir.key() == "DE"sv ) var.set_descr( dir.value() );
             else notify_error("Unexpected directive \"{}\" in variable \"{}\" declaration", dir.key(), var.name());
            }
@@ -607,7 +643,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         skip_blanks();
         if( is_directive() )
            {
-            plcb::Directive dir = collect_directive();
+            const plcb::Directive dir = collect_directive();
             if( dir.key() == "DE"sv ) strct.set_descr( dir.value() );
             else notify_error("Unexpected directive \"{}\" in struct \"{}\"", dir.key(), strct.name());
            }
@@ -650,7 +686,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         skip_blanks();
         if( is_directive() )
            {
-            plcb::Directive dir = collect_directive();
+            const plcb::Directive dir = collect_directive();
             if( dir.key() == "DE"sv ) elem.set_descr( dir.value() );
             else notify_error("Unexpected directive \"{}\" in enum element \"{}\"", dir.key(), elem.name());
            }
@@ -671,9 +707,11 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         // Name already collected, ": (" already skipped
         // Possible description
         skip_blanks();
+        eat_line_end(); // Possibile interruzione di linea
+        skip_blanks();
         if( is_directive() )
            {
-            plcb::Directive dir = collect_directive();
+            const plcb::Directive dir = collect_directive();
             if( dir.key() == "DE"sv ) en.set_descr( dir.value() );
             else notify_error("Unexpected directive \"{}\" in enum \"{}\"", dir.key(), en.name());
            }
@@ -708,31 +746,34 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
 
         // [Min and Max]
         skip_blanks();
-        if (i >= siz || buf[i] != '(') throw fmtstr::error("Expected \"(min..max)\" in subrange \"{}\"", subr.name());
+        if(i >= siz || buf[i] != '(') throw fmtstr::error("Expected \"(min..max)\" in subrange \"{}\"", subr.name());
         ++i; // Skip '('
         skip_blanks();
-        const double min_val = extract_double();
+        const auto min_val = extract_integer(); // extract_double(); // Nah, Floating point numbers seems not supported
         skip_blanks();
-        if (!eat_string(".."sv)) throw fmtstr::error("Expected \"..\" in subrange \"{}\"", subr.name());
+        if(!eat_string(".."sv)) throw fmtstr::error("Expected \"..\" in subrange \"{}\"", subr.name());
         skip_blanks();
-        const double max_val = extract_double();
+        const auto max_val = extract_integer();
         skip_blanks();
-        if (i >= siz || buf[i] != ')') throw fmtstr::error("Expected \')\' in subrange \"{}\"", subr.name());
+        if(i >= siz || buf[i] != ')') throw fmtstr::error("Expected \')\' in subrange \"{}\"", subr.name());
         ++i; // Skip ')'
+        skip_blanks();
+        if(i >= siz || buf[i] != ';') throw fmtstr::error("Expected \';\' in subrange \"{}\"", subr.name());
+        ++i; // Skip ';'
         subr.set_range(min_val, max_val);
 
         // [Description]
         skip_blanks();
-        if (is_directive())
-        {
-            plcb::Directive dir = collect_directive();
-            if (dir.key() == "DE"sv) subr.set_descr(dir.value());
+        if(is_directive())
+           {
+            const plcb::Directive dir = collect_directive();
+            if(dir.key() == "DE"sv) subr.set_descr(dir.value());
             else notify_error("Unexpected directive \"{}\" in subrange \"{}\" declaration", dir.key(), subr.name());
-        }
+           }
 
         // Expecting a line end now
         skip_blanks();
-        if (!eat_line_end()) notify_error("Unexpected content after subrange \"{}\" declaration: {}", subr.name(), str::escape(skip_line()));
+        if(!eat_line_end()) notify_error("Unexpected content after subrange \"{}\" declaration: {}", subr.name(), str::escape(skip_line()));
         //DBGLOG("    [*] Collected subrange: name=\"{}\" type=\"{}\" min=\"{}\" max=\"{}\" descr=\"{}\"\n", subr.name(), subr.type(), subr.min(), subr.max(), subr.descr())
     };
 
@@ -879,7 +920,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                     //END_POU
                     skip_blanks();
                     if(i>=siz) throw fmtstr::error("{} not closed by {}", collecting.pou_start, collecting.pou_end);
-                    else if( eat_line_end() ) continue;
+                    else if( substatus!=SUB::GET_BODY && eat_line_end() ) continue;
                     else
                        {
                         switch(substatus)
@@ -887,7 +928,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                             case SUB::GET_HEADER :
                                 if( is_directive() )
                                    {
-                                    plcb::Directive dir = collect_directive();
+                                    const plcb::Directive dir = collect_directive();
                                     if( dir.key() == "DE"sv )
                                        {// Is a description
                                         if( !collecting.pous->back().descr().empty() ) notify_error("{} has already a description: {}", collecting.pou_start, collecting.pous->back().descr());
@@ -1008,7 +1049,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                     //END_MACRO
                     skip_blanks();
                     if(i>=siz) throw fmtstr::error("MACRO not closed by END_MACRO");
-                    else if( eat_line_end() ) continue;
+                    else if( substatus!=SUB::GET_BODY && eat_line_end() ) continue;
                     else
                        {
                         switch(substatus)
@@ -1016,7 +1057,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                             case SUB::GET_HEADER :
                                 if( is_directive() )
                                    {
-                                    plcb::Directive dir = collect_directive();
+                                    const plcb::Directive dir = collect_directive();
                                     if( dir.key() == "DE"sv )
                                        {// Is a description
                                         if( !lib.macros().back().descr().empty() ) notify_error("Macro {} has already a description: {}", lib.macros().back().name(), lib.macros().back().descr());
@@ -1089,7 +1130,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                     else if( eat_line_end() ) continue;
                     else if( is_directive() )
                        {
-                        plcb::Directive dir = collect_directive();
+                        const plcb::Directive dir = collect_directive();
                         if( dir.key() == "G" )
                            {// È la descrizione di un gruppo di variabili
                             if( dir.value().find(' ')!=std::string::npos ) notify_error("Avoid spaces in group name \"{}\"", dir.value());
@@ -1117,11 +1158,12 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                     break; // STS::GLOBALVARS
 
                 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
-                case STS::TYPE : // Collecting struct/typdef/enum
+                case STS::TYPE : // Collecting struct/typdef/enum/subrange
                     //    TYPE
-                    //    ST_RECT : STRUCT { DE:"descr" } member : DINT; { DE:"member descr" } ... END_STRUCT;
-                    //    VASTR : STRING[ 80 ]; { DE:"descr" }
-                    //    EN_NAME: ( { DE:"descr" } VAL1 := 0, { DE:"elem descr" } ... );
+                    //    str_name : STRUCT { DE:"descr" } member : DINT; { DE:"member descr" } ... END_STRUCT;
+                    //    typ_name : STRING[ 80 ]; { DE:"descr" }
+                    //    en_name: ( { DE:"descr" } VAL1 := 0, { DE:"elem descr" } ... );
+                    //    subr_name : DINT (30..100);
                     //    END_TYPE
                     skip_blanks();
                     if(i>=siz) throw fmtstr::error("TYPE not closed by END_TYPE");
@@ -1175,6 +1217,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                                     plcb::Subrange subr;
                                     subr.set_name(type_name);
                                     collect_rest_of_subrange(subr);
+                                    lib.subranges().push_back( std::move(subr) );
                                    }
                                 else
                                    {// Typedef: <name> : <type>; { DE:"descr" }

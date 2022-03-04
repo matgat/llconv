@@ -8,7 +8,7 @@ HEADERS = $(wildcard $(SRCDIR)/*.hpp)
 #OBJS := $(SRCS:%.cpp=BLDDIR/%.o)
 
 CXX = g++
-CXXFLAGS = -std=c++2b -funsigned-char -Wextra -Wall -pedantic -O3 -DFMT_HEADER_ONLY -Isource/fmt/include
+CXXFLAGS = -std=c++2b -funsigned-char -Wall -Wextra -Wpedantic -Wconversion -O3 -DFMT_HEADER_ONLY -Isource/fmt/include
 #CXX = cl.exe
 #CXXFLAGS = /std:c++latest /utf-8 /J /W4 /O2 /D_CRT_SECURE_NO_WARNINGS /DFMT_HEADER_ONLY /I../source/fmt/include
 

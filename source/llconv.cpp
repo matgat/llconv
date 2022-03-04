@@ -51,44 +51,47 @@ class Arguments
                 switch( status )
                    {
                     case STS::SEE_ARG :
-                        if( arg[0] == '-' )
+                        if( arg.length()>1 && arg[0]=='-' )
                            {// A command switch!
-                            if( arg=="-fussy"sv )
+                            // Skip hyphen, tolerate also doubled ones
+                            const std::size_t skip = arg[1]=='-' ? 2 : 1;
+                            const std::string_view swtch{ arg.data()+skip, arg.length()-skip};
+                            if( swtch=="fussy"sv )
                                {
                                 i_fussy = true;
                                }
-                            else if( arg=="-verbose"sv )
+                            else if( swtch=="verbose"sv || swtch=="v"sv )
                                {
                                 i_verbose = true;
                                }
-                            else if( arg=="-sort"sv )
+                            else if( swtch=="options"sv )
                                {
-                                i_sort = true;
+                                status = STS::GET_OPTS; // stringlist expected
                                }
-                            else if( arg=="-options"sv )
+                            else if( swtch=="output"sv || swtch=="o"sv )
                                {
-                                status = STS::GET_OPTS; // Value expected
+                                status = STS::GET_OUT; // path expected
                                }
-                            else if( arg=="-output"sv )
-                               {
-                                status = STS::GET_OUT; // Value expected
-                               }
-                            else if( arg=="-h"sv || arg=="-help"sv )
+                            else if( swtch=="help"sv || swtch=="h"sv )
                                {
                                 print_help();
                                 throw std::invalid_argument("Aborting after printing help");
                                }
                             else
                                {
-                                throw std::invalid_argument(fmt::format("Unknown argument: {}",arg));
+                                throw std::invalid_argument(fmt::format("Unknown command switch: {}",swtch));
                                }
                            }
                         else
-                           {// An input file
+                           {// Probably an input file
                             //i_files.emplace_back(arg);
-                            const auto globbed = sys::glob(arg);
-                            i_files.reserve(i_files.size() + globbed.size());
-                            i_files.insert(i_files.end(), globbed.begin(), globbed.end());
+                            const auto in_paths = sys::file_glob(arg);
+                            if( in_paths.empty() )
+                               {
+                                throw std::invalid_argument(fmt::format("File(s) not found: {}",arg));
+                               }
+                            i_files.reserve(i_files.size() + in_paths.size());
+                            i_files.insert(i_files.end(), in_paths.begin(), in_paths.end());
                            }
                         break;
 
@@ -127,7 +130,7 @@ class Arguments
                      "    \"*.pll\" LogicLab3 library file\n"
                      "    \"*.plclib\" LogicLab5 library file\n"
                      "Sipro *.h files resemble a c-like header with #define directives.\n"
-                     "LogicLab files are xml containers of IEC 61131-3 ST code.\n"
+                     "LogicLab files are text containers of IEC 61131-3 ST code.\n"
                      "The supported transformations are:\n"
                      "    \"*.h\" -> \"*.pll\", \"*.plclib\"\n"
                      "    \"*.pll\" -> \"*.plclib\"\n"
@@ -137,13 +140,13 @@ class Arguments
     static void print_usage() noexcept
        {
         std::cerr << "\nUsage:\n"
-                     "   llconv -fussy -verbose -options schemaver:2.8 path/to/*.pll -output path/\n"
+                     "   llconv -fussy -verbose -options sort,schemaver:2.8 path/to/*.pll -output path/\n"
                      "       -fussy (Handle issues as blocking errors)\n"
                      "       -help (Just print help info and abort)\n"
                      "       -options (LogicLab plclib schema version)\n"
                      "            schema-ver:<num> (Indicate a schema version for LogicLab plclib output)\n"
+                     "            sort:<str> (Sort objects by criteria default:by-name)\n"
                      "       -output <path> (Set output directory or file)\n"
-                     "       -sort (Order objects by name)\n"
                      "       -verbose (Print more info on stdout)\n"
                      "\n";
        }
@@ -152,7 +155,6 @@ class Arguments
     const auto& output() const noexcept { return i_output; }
     bool output_isdir() const noexcept { return i_output_isdir; }
     bool fussy() const noexcept { return i_fussy; }
-    bool sort() const noexcept { return i_sort; }
     bool verbose() const noexcept { return i_verbose; }
     const str::keyvals& options() const noexcept { return i_options; }
 
@@ -161,11 +163,9 @@ class Arguments
     fs::path i_output = ".";
     bool i_output_isdir = false; // Cached result
     bool i_fussy = false;
-    bool i_sort = false;
     bool i_verbose = false;
     str::keyvals i_options; // Conversion and writing options
 };
-
 
 
 
@@ -202,26 +202,32 @@ template<typename F> void parse_buffer(F parsefunct, const std::string_view buf,
         sys::launch( log_file_path );
        }
 
-    // Check/manipulate the result
+    // Check the result
     lib.check(); // throws if something's wrong
-    if( args.sort() )
+    if( lib.is_empty() )
+        {
+         issues.push_back( fmt::format("{} generated an empty library",path) );
+        }
+
+    // Manipulate the result
+    //const auto [ctime, mtime] = sys::get_file_dates(path);
+    //std::cout << "created:" << sys::human_readable_time_stamp(ctime) << " modified:" << sys::human_readable_time_stamp(mtime) << '\n';
+    //lib.set_dates(ctime, mtime);
+    if( args.options().contains("sort")) // args.options().value_of("sort")=="name"
        {
         //if( args.verbose() ) std::cout << "Sorting lib " << lib.name() << '\n';
         lib.sort();
        }
 
-    //auto [ctime, mtime] = sys::get_file_dates(path);
-    //std::cout << "pll created:" << sys::human_readable_time_stamp(ctime) << " modified:" << sys::human_readable_time_stamp(mtime) << '\n';
-    //lib.set_dates(ctime, mtime);
 }
 
 //---------------------------------------------------------------------------
 // Write PLC library to plclib format
-inline void write_plclib(const plcb::Library& lib, const fs::path& inpth, const Arguments& args)
+inline [[maybe_unused]] fs::path write_plclib(const plcb::Library& lib, const std::string& in_base_name, const Arguments& args)
 {
     //if( args.output_isdir() )
     //   {// Create a 'plclib' file in the output directory
-        const fs::path opth{ args.output() / str::replace_extension(inpth.filename().string(), ".plclib") };
+        const fs::path opth{ args.output() / fmt::format("{}.plclib", in_base_name) };
         const std::string out_path{ opth.string() };
         if(args.verbose()) std::cout << "    " "Writing to: "  << out_path << '\n';
         sys::file_write out_file_write( out_path );
@@ -231,15 +237,16 @@ inline void write_plclib(const plcb::Library& lib, const fs::path& inpth, const 
     //   {// Combine in a single 'plcprj' file
     //    throw std::runtime_error(fmt::format("Combine into existing plcprj file {} not yet supported", args.output().string()));
     //   }
+    return opth;
 }
 
 //---------------------------------------------------------------------------
 // Write PLC library to pll format
-inline void write_pll(const plcb::Library& lib, const fs::path& inpth, const Arguments& args)
+inline [[maybe_unused]] fs::path write_pll(const plcb::Library& lib, const std::string& in_base_name, const Arguments& args)
 {
     //if( args.output_isdir() )
     //   {// Create a 'plclib' file in the output directory
-        const fs::path opth{ args.output() / str::replace_extension(inpth.filename().string(), ".pll") };
+        const fs::path opth{ args.output() / fmt::format("{}.pll", in_base_name) };
         const std::string out_path{ opth.string() };
         if(args.verbose()) std::cout << "    " "Writing to: "  << out_path << '\n';
         sys::file_write out_file_write( out_path );
@@ -249,7 +256,28 @@ inline void write_pll(const plcb::Library& lib, const fs::path& inpth, const Arg
     //   {// Combine in a single 'pll' file
     //    throw std::runtime_error(fmt::format("Combine into existing pll file {} not yet supported", args.output().string()));
     //   }
+    return opth;
 }
+
+
+
+#ifdef PLL_TEST
+//---------------------------------------------------------------------------
+// Una funzione di test
+void test_pll(const std::string& fbasename, const plcb::Library& lib, const Arguments& args, std::vector<std::string>& issues)
+{
+    // Riscrivo come pll la libreria in ingresso...
+    const fs::path gen_pll_1_pth = write_pll(lib, fmt::format("{}-1", fbasename), args);
+    // ...Lo rileggo generando una nuova libreria...
+    const sys::MemoryMappedFile buf2(gen_pll_1_pth.string());
+    plcb::Library lib2( gen_pll_1_pth.stem().string() );
+    parse_buffer(pll::parse, buf2.as_string_view(), gen_pll_1_pth.string(), lib2, args, issues);
+    //if(lib2!=lib) ...
+    // ...E lo riscrivo
+    const fs::path gen_pll_2_pth = write_pll(lib2, fmt::format("{}-2", fbasename), args);
+}
+#endif
+
 
 
 //---------------------------------------------------------------------------
@@ -275,6 +303,8 @@ int main( int argc, const char* argv[] )
         for( const auto& pth : args.files() )
            {
             // Prepare the file buffer
+            // Note: Extension not recognized is an exceptional case,
+            //       so there's nor arm to confidently open the file
             const std::string file_path{pth.string()};
             const sys::MemoryMappedFile file_buf(file_path); // Do not deallocate until the very end!
 
@@ -288,20 +318,25 @@ int main( int argc, const char* argv[] )
                 else std::cout << file_buf.size() << "B)\n";
                }
 
-            plcb::Library lib( pth.stem().string() ); // This will refer to 'file_buf'!
+            const std::string fbasename = pth.stem().string();
+            plcb::Library lib( fbasename ); // This will refer to 'file_buf'!
 
             // Recognize by file extension
             const std::string ext {str::tolower(pth.extension().string())};
             if( ext == ".pll" )
                {// pll -> plclib
                 parse_buffer(pll::parse, file_buf.as_string_view(), file_path, lib, args, issues);
-                write_plclib(lib, pth, args);
+              #ifdef PLL_TEST
+                test_pll(fbasename, lib, args, issues);
+              #else
+                write_plclib(lib, fbasename, args);
+              #endif
                }
             else if( ext == ".h" )
                {// h -> pll,plclib
                 parse_buffer(h::parse, file_buf.as_string_view(), file_path, lib, args, issues);
-                write_pll(lib, pth, args);
-                write_plclib(lib, pth, args);
+                write_pll(lib, fbasename, args);
+                write_plclib(lib, fbasename, args);
                }
             else
                {

@@ -1,28 +1,90 @@
-# [llconv](https://github.com/matgat/llconv.git)
+## [llconv](https://github.com/matgat/llconv.git)
 This is a conversion utility between these formats:
-* `*.h` (Sipro *#defines* file)
-* `*.pll` (LogicLab3 library file)
-* `*.plclib` (LogicLab5 library file)
+* `.h` (Sipro source header)
+* `.pll` (Plc LogicLab3 Library)
+* `.plclib` (LogicLab5 PLC LIBrary)
 
-Sipro `*.h` files resemble a c-like header with `#define` directives.
-LogicLab library files are proprietary containers of IEC 61131-3 ST code,
-the latest (`*.plclib`) are xml based.
+Sipro `.h` files resemble a c-like header with `#define` directives.
+LogicLab library files are text files that contain *IEC 61131-3* ST code,
+the latest format (`.plclib`) is xml based.
 
 The supported transformations are:
-* `*.h` → `*.pll`, `*.plclib`
-* `*.pll` → `*.plclib`
+* `.h` → `.pll`, `.plclib`
+* `.pll` → `.plclib`
 
 
-## Limitations
+
+### Limitations
+
+#### Input files
 Input files must:
-* Be encoded in ANSI or UTF-8
-* Have strictly unix line breaks (`\n`)
-* PLL descriptions (`{DE: ...}`) cannot contain line breaks or XML special characters
+* Be encoded in `ANSI` or `UTF-8`\
+  _Rationale: Other encodings have only disadvantages and must be avoided:
+              much more size (text mostly ASCII),
+              slower parsing (endianness),
+              less compatibility and comparability_
+* Have strictly unix line breaks (`LF`, `\n`)\
+  _Rationale: There's really no point for two-chars lines breaks
+              unless you're stuck with `notepad.exe` or sending
+              the character stream to an ancient typewriter_
+
+#### Syntax
+* _IEC 61131-3_ multidimensional arrays like `ARRAY[1..2, 1..2]` not supported
+* `.h` `#define`s are required to have a line comment (`// ...`) containing the description
+* Descriptions (`.h` `#define`s comment and `.pll` `{DE: ...}`) cannot contain XML special characters nor line breaks\
+  _Rationale: Parsing is much more faster without dynamic allocations to
+              store a modified input (in this case to escape characters)_
 
 
-## Additional data in PLL files
+
+### `.h` files
+Sipro header files supported syntax is:
+```
+// line comment
+/*  -------------
+    block comment
+    ------------- */
+#define reg_label register // description
+#define val_label value // [type] description
+```
+Definitions inlined comments cannot contain XML special characters.
+
+Sipro registers will be recognized and exported:
+```
+#define vqPos vq100 // Position [mm]
+```
+
+It's possible to export also numeric constants
+declaring their *IEC 61131-3* type as in:
+```
+#define PI 3.14159 // [LREAL] Circumference/diameter ratio
+```
+
+The recognized types are:
+
+| type        | description                 | size | range                     |
+| ----------- | --------------------------- | ---- | ------------------------- |
+|   `BOOL`    | *BOOLean*                   |  1   | FALSE/TRUE                |
+|   `SINT`    | *Short INTeger*             |  1   | -128 … 127                |
+|   `INT`     | *INTeger*                   |  2   | -32768 … 32767            |
+|   `DINT`    | *Double INTeger*            |  4   |  -2147483648 … 2147483647 |
+| ~~`LINT`~~  | ~~*Long INTeger*~~          |  8   | -2⁶³ … 2⁶³⁻¹              |
+|   `USINT`   | *Unsigned Short INTeger*    |  1   | 0 … 255                   |
+|   `UINT`    | *Unsigned INTeger*          |  2   | 0 … 65535                 |
+|   `UDINT`   | *Unsigned Double INTeger*   |  4   | 0 … 4294967295            |
+| ~~`ULINT`~~ | ~~*Unsigned Long INTeger*~~ |  8   | 0 … 18446744073709551615  |
+| ~~`REAL`~~  | ~~*REAL number*~~           |  4   | ±10³⁸                     |
+|   `LREAL`   | *Long REAL number*          |  8   | ±10³⁰⁸                    |
+|   `BYTE`    | *1 byte*                    |  1   | 0 … 255                   |
+|   `WORD`    | *2 bytes*                   |  2   | 0 … 65535                 |
+|   `DWORD`   | *4 bytes*                   |  4   | 0 … 4294967295            |
+| ~~`LWORD`~~ | ~~*8 bytes*~~               |  8   | 0 … 18446744073709551615  |
+
+
+
+### `.pll` files
 Some additional library data will be extracted from the
-first comment of the PLL file:
+first comment of the `.pll` file:
 ```
 (*
     descr: Machine logic stuff
@@ -31,33 +93,38 @@ first comment of the PLL file:
 ```
 
 
-## Usage
-To print some info:
+
+### Usage
+To print usage info:
 ```
 $ llconv -help
 ```
 
-Input files can be a mixed set of `*.h` and `*.pll`.
-The `*.h` files will generate both formats `*.pll` and `*.plclib`.
+Input files can be a mixed set of `.h` and `.pll`.
+The `.h` files will generate both formats `.pll` and `.plclib`.
 
-To transform all `*.h` files in the current directory into a given output directory:
+Transform all `.h` files in the current directory into a given output directory:
 ```
-$ llconv -fussy *.h -output LogicLab/generated-libs
-```
-
-Similarly, to transform all files in the current directory:
-```
-$ llconv -fussy -schemaver 2.8 *.h *.pll -output LogicLab/generated-libs
+$ llconv -fussy *.h -output plc/LogicLab/generated-libs
 ```
 
+Transform all `.h` files in `prog/` and all `.pll` files in `plc/`,
+sorting output objects by name and indicating `plclib` schema version:
+```
+$ llconv -fussy -options sort:by-name,schemaver:2.8 prog/*.h plc/*.pll -output plc/LogicLab/generated-libs
+```
 
-## Build
+
+
+### Build
 ```
 $ git clone https://github.com/matgat/llconv.git
 $ cd llconv
 $ make stuff/makefile
-$ g++ -std=c++2b -funsigned-char -Wextra -Wall -pedantic -O3 -DFMT_HEADER_ONLY -Isource/fmt/include -o "llconv" "source/llconv.cpp"
+$ g++ -std=c++2b -funsigned-char -Wall -Wextra -Wpedantic -Wconversion -O3 -DFMT_HEADER_ONLY -Isource/fmt/include -o "llconv" "source/llconv.cpp"
+```
 Not so sure about these:
+```
 > msbuild msvc/llconv.vcxproj -t:llconv -p:Configuration=Release
 > cl /std:c++latest /utf-8 /J /W4 /O2 /D_CRT_SECURE_NO_WARNINGS /DFMT_HEADER_ONLY /I../source/fmt/include "source/llconv.cpp" /link /out:llconv.exe
 ```

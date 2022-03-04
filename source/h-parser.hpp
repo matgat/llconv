@@ -31,25 +31,26 @@ namespace h //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Descriptor of a '#define' entry in the file
-class RawDefine
+// Descriptor of a '#define' entry in a buffer
+class DefineRef
 {
  public:
+    [[nodiscard]] operator bool() const noexcept { return !i_Value.empty(); }
 
-    std::string_view label() const noexcept { return i_Label; }
+    [[nodiscard]] std::string_view label() const noexcept { return i_Label; }
     void set_label(const std::string_view s)
        {
         if(s.empty()) throw std::runtime_error("Empty define label");
         i_Label = s;
        }
 
-    std::string_view value() const noexcept { return i_Value; }
+    [[nodiscard]] std::string_view value() const noexcept { return i_Value; }
     void set_value(const std::string_view s)
        {
         if(s.empty()) throw std::runtime_error("Empty define value");
         i_Value = s;
        }
-    bool value_is_number() const noexcept
+    [[nodiscard]] bool value_is_number() const noexcept
        {
         double result;
         const auto i_end = i_Value.data() + i_Value.size();
@@ -57,13 +58,13 @@ class RawDefine
         return ec==std::errc() && i==i_end;
        }
 
-    std::string_view comment() const noexcept { return i_Comment; }
+    [[nodiscard]] std::string_view comment() const noexcept { return i_Comment; }
     void set_comment(const std::string_view s) noexcept { i_Comment = s; }
-    bool has_comment() const noexcept { return !i_Comment.empty(); }
+    [[nodiscard]] bool has_comment() const noexcept { return !i_Comment.empty(); }
 
-    std::string_view comment_predecl() const noexcept { return i_CommentPreDecl; }
+    [[nodiscard]] std::string_view comment_predecl() const noexcept { return i_CommentPreDecl; }
     void set_comment_predecl(const std::string_view s) noexcept { i_CommentPreDecl = s; }
-    bool has_comment_predecl() const noexcept { return !i_CommentPreDecl.empty(); }
+    [[nodiscard]] bool has_comment_predecl() const noexcept { return !i_CommentPreDecl.empty(); }
 
  private:
     std::string_view i_Label;
@@ -73,86 +74,132 @@ class RawDefine
 };
 
 
-//---------------------------------------------------------------------------
-// Parse a generic 'h' file containing a list of c-like preprocessor defines
-std::vector<RawDefine> do_parse(const std::string_view buf, std::vector<std::string>& issues, const bool fussy)
+/////////////////////////////////////////////////////////////////////////////
+// consteval friendly:
+#define notify_error(...) \
+   {\
+    if(fussy) throw std::runtime_error( fmt::format(__VA_ARGS__) );\
+    else issues.push_back( fmt::format("{} (line {}, offset {})"sv, fmt::format(__VA_ARGS__), line, i) );\
+   }
+/////////////////////////////////////////////////////////////////////////////
+class Parser
 {
-    std::vector<RawDefine> defines;
-
-    // Check possible BOM    |  Encoding    |   Bytes     | Chars |
-    //                       |--------------|-------------|-------|
-    //                       | UTF-8        | EF BB BF    | ï»¿   |
-    //                       | UTF-16 (BE)  | FE FF       | þÿ    |
-    //                       | UTF-16 (LE)  | FF FE       | ÿþ    |
-    //                       | UTF-32 (BE)  | 00 00 FE FF | ..þÿ  |
-    //                       | UTF-32 (LE)  | FF FE 00 00 | ÿþ..  |
-    const std::size_t siz = buf.size();
-    if( siz < 2 )
+ public:
+    Parser(const std::string_view b, std::vector<std::string>& sl, const bool f)
+      : buf(b.data())
+      , siz(b.size())
+      , line(1)
+      , i(0)
+      , issues(sl)
+      , fussy(f)
        {
-        if(fussy)
+        // Check possible BOM    |  Encoding    |   Bytes     | Chars |
+        //                       |--------------|-------------|-------|
+        //                       | UTF-8        | EF BB BF    | ï»¿   |
+        //                       | UTF-16 (BE)  | FE FF       | þÿ    |
+        //                       | UTF-16 (LE)  | FF FE       | ÿþ    |
+        //                       | UTF-32 (BE)  | 00 00 FE FF | ..þÿ  |
+        //                       | UTF-32 (LE)  | FF FE 00 00 | ÿþ..  |
+        if( siz < 2 )
            {
-            throw std::runtime_error("Empty file");
+            notify_error("Empty file");
            }
-        else
+
+        if( buf[0]=='\xFF' || buf[0]=='\xFE' || buf[0]=='\x00' )
            {
-            issues.emplace_back("Empty file");
-            return defines;
+            throw std::runtime_error("Bad encoding, not UTF-8");
            }
        }
-    // Mi accontento di intercettare UTF-16
-    if( buf[0]=='\xFF' || buf[0]=='\xFE' ) throw std::runtime_error("Bad encoding, not UTF-8");
 
-    std::size_t line = 1; // Current line number
-    std::size_t i = 0; // Current character
+    [[nodiscard]] DefineRef next_define()
+       {
+        DefineRef def;
 
-    //---------------------------------
-    //auto notify_error = [&](const std::string_view msg, auto... args)
+        try{
+            while( i<siz )
+               {
+                skip_blanks();
+                if( eat_line_comment_start() )
+                   {
+                    skip_line();
+                   }
+                else if( eat_block_comment_start() )
+                   {
+                    skip_block_comment();
+                   }
+                else if( eat_line_end() )
+                   {// An empty line
+                   }
+                else if( eat_token("#define"sv) )
+                   {
+                    collect_define(def);
+                    break;
+                   }
+                else notify_error("Unexpected content: {}", str::escape(skip_line()));
+               }
+           }
+        catch(std::exception& e)
+           {
+            throw fmtstr::parse_error(e.what(), line, i);
+           }
+
+        return def;
+       }
+
+ private:
+    const char* const buf;
+    const std::size_t siz; // buffer size
+    std::size_t line; // Current line number
+    std::size_t i; // Current character
+    std::vector<std::string>& issues; // Problems found
+    const bool fussy;
+
+    //-----------------------------------------------------------------------
+    //template<typename ...Args> void notify_error(const std::string_view msg, Args&&... args) const
     //   {
+    //    // Unfortunately this generates error: "call to immediate function is not a constant expression"
+    //    //if(fussy) throw std::runtime_error( fmt::format(msg, args...) );
+    //    //else issues.push_back( fmt::format("{} (line {}, offset {})"sv, fmt::format(msg, args...), line, i) );
     //    if(fussy) throw std::runtime_error( fmt::format(fmt::runtime(msg), args...) );
     //    else issues.push_back( fmt::format("{} (line {}, offset {})", fmt::format(fmt::runtime(msg), args...), line, i) );
     //   };
-    // Ehmm, with a lambda I cannot use consteval format
-    #define notify_error(...) \
-       {\
-        if(fussy) throw std::runtime_error( fmt::format(__VA_ARGS__) );\
-        else issues.push_back( fmt::format("{} (line {}, offset {})"sv, fmt::format(__VA_ARGS__), line, i) );\
-       }
 
-    //---------------------------------
-    auto is_blank = [](const char c) noexcept -> bool
+    //-----------------------------------------------------------------------
+    [[nodiscard]] static bool is_blank(const char c) noexcept
        {
         return std::isspace(c) && c!='\n';
-       };
+       }
 
-    //---------------------------------
+    //-----------------------------------------------------------------------
     // Skip space chars except new line
-    auto skip_blanks = [&]() noexcept -> void
+    void skip_blanks() noexcept
        {
         while( i<siz && is_blank(buf[i]) ) ++i;
-       };
+       }
 
-    //---------------------------------
-    auto eat_line_end = [&]() noexcept -> bool
+    //-----------------------------------------------------------------------
+    bool eat_line_end() noexcept
        {
-        if( i<siz && buf[i]=='\n' )
+        assert(i<siz);
+        if( buf[i]=='\n' )
            {
             ++i;
             ++line;
             return true;
            }
         return false;
-       };
+       }
 
-    //---------------------------------
-    auto skip_line = [&]() noexcept -> std::string_view
+    //-----------------------------------------------------------------------
+    std::string_view skip_line() noexcept
        {
         const std::size_t i_start = i;
         while( i<siz && !eat_line_end() ) ++i;
-        return std::string_view(buf.data()+i_start, i-i_start);
-       };
+        return std::string_view(buf+i_start, i-i_start);
+       }
 
-    //---------------------------------
-    auto eat_line_comment_start = [&]() noexcept -> bool
+    //-----------------------------------------------------------------------
+    [[nodiscard]] bool eat_line_comment_start() noexcept
        {
         if( i<(siz-1) && buf[i]=='/' && buf[i+1]=='/' )
            {
@@ -160,10 +207,10 @@ std::vector<RawDefine> do_parse(const std::string_view buf, std::vector<std::str
             return true;
            }
         return false;
-       };
+       }
 
-    //---------------------------------
-    auto eat_block_comment_start = [&]() noexcept -> bool
+    //-----------------------------------------------------------------------
+    [[nodiscard]] bool eat_block_comment_start() noexcept
        {
         if( i<(siz-1) && buf[i]=='/' && buf[i+1]=='*' )
            {
@@ -171,10 +218,10 @@ std::vector<RawDefine> do_parse(const std::string_view buf, std::vector<std::str
             return true;
            }
         return false;
-       };
+       }
 
-    //---------------------------------
-    auto skip_block_comment = [&]() -> void
+    //-----------------------------------------------------------------------
+    void skip_block_comment()
        {
         const std::size_t line_start = line; // Store current line
         const std::size_t i_start = i; // Store current position
@@ -193,54 +240,52 @@ std::vector<RawDefine> do_parse(const std::string_view buf, std::vector<std::str
             ++i;
            }
         throw fmtstr::parse_error("Unclosed block comment", line_start, i_start);
-       };
+       }
 
-    //---------------------------------
-    auto eat_token = [&](const std::string_view s) noexcept -> bool
+    //-----------------------------------------------------------------------
+    [[nodiscard]] bool eat_token(const std::string_view s) noexcept
        {
         const std::size_t i_end = i+s.length();
-        if( ((i_end<siz && !std::isalnum(buf[i_end])) || i_end==siz) && s==std::string_view(buf.data()+i,s.length()) )
+        if( ((i_end<siz && !std::isalnum(buf[i_end])) || i_end==siz) && s==std::string_view(buf+i,s.length()) )
            {
             i = i_end;
             return true;
            }
         return false;
-       };
+       }
 
-    //---------------------------------
-    //auto eat_directive_start = [&]() noexcept -> bool
-    //   {//#define
+    //-----------------------------------------------------------------------
+    //[[nodiscard]] bool eat_directive_start() noexcept
+    //   {
     //    if( i<siz && buf[i]=='#' )
     //       {
     //        ++i;
     //        return true;
     //       }
     //    return false;
-    //   };
+    //   }
 
-    //---------------------------------
-    auto collect_token = [&]() noexcept -> std::string_view
+    //-----------------------------------------------------------------------
+    [[nodiscard]] std::string_view collect_token() noexcept
        {
         const std::size_t i_start = i;
         while( i<siz && !std::isspace(buf[i]) ) ++i;
-        return std::string_view(buf.data()+i_start, i-i_start);
-       };
+        return std::string_view(buf+i_start, i-i_start);
+       }
 
-    //---------------------------------
-    auto collect_identifier = [&]() noexcept -> std::string_view
+    //-----------------------------------------------------------------------
+    [[nodiscard]] std::string_view collect_identifier() noexcept
        {
         const std::size_t i_start = i;
         while( i<siz && (std::isalnum(buf[i]) || buf[i]=='_') ) ++i;
-        return std::string_view(buf.data()+i_start, i-i_start);
-       };
+        return std::string_view(buf+i_start, i-i_start);
+       }
 
-
-    //---------------------------------
-    auto collect_define = [&]() -> RawDefine
+    //-----------------------------------------------------------------------
+    void collect_define(DefineRef& def)
        {// LABEL       0  // [INT] Descr
         // vnName     vn1782  // descr [unit]
         // Contract: '#define' already eat
-        RawDefine def;
         // [Label]
         skip_blanks();
         def.set_label( collect_identifier() );
@@ -268,7 +313,7 @@ std::vector<RawDefine> do_parse(const std::string_view buf, std::vector<std::str
                     if( i>=siz || buf[i]=='\n' )
                        {
                         notify_error("Unclosed initial \'[\' in the comment of define {}", def.label());
-                        def.set_comment( std::string_view(buf.data()+i_start, i_last_not_blank-i_start) );
+                        def.set_comment( std::string_view(buf+i_start, i_last_not_blank-i_start) );
                         break;
                        }
                     else if( buf[i]==']' )
@@ -287,7 +332,7 @@ std::vector<RawDefine> do_parse(const std::string_view buf, std::vector<std::str
                }
             if( i_pre_start<siz )
                {
-                def.set_comment_predecl( std::string_view(buf.data()+i_pre_start, i_pre_len) );
+                def.set_comment_predecl( std::string_view(buf+i_pre_start, i_pre_len) );
                }
 
             // Collect the actual comment text
@@ -310,7 +355,7 @@ std::vector<RawDefine> do_parse(const std::string_view buf, std::vector<std::str
                    }
                 while( i<siz );
 
-                def.set_comment( std::string_view(buf.data()+i_txt_start, i_txt_len) );
+                def.set_comment( std::string_view(buf+i_txt_start, i_txt_len) );
                }
            }
         else
@@ -319,32 +364,10 @@ std::vector<RawDefine> do_parse(const std::string_view buf, std::vector<std::str
            }
 
         //DBGLOG("    [*] Collected define: label=\"{}\" value=\"{}\" comment=\"{}\"\n", def.label(), def.value(), def.comment())
-        return def;
-       };
-
-
-    try{
-        while( i<siz )
-           {
-            skip_blanks();
-            if(i>=siz) break;
-            else if( eat_line_comment_start() ) skip_line(); // A line comment
-            else if( eat_block_comment_start() ) skip_block_comment(); // If supporting block comments
-            else if( eat_line_end() ) continue; // An empty line
-            else if( eat_token("#define"sv) ) defines.push_back( collect_define() );
-            else notify_error("Unexpected content: {}", str::escape(skip_line()));
-           }
        }
-    catch(std::exception& e)
-       {
-        throw fmtstr::parse_error(e.what(), line, i);
-       }
+};
 
-    return defines;
-
-    #undef notify_error
-}
-
+#undef notify_error
 
 
 
@@ -352,16 +375,14 @@ std::vector<RawDefine> do_parse(const std::string_view buf, std::vector<std::str
 // Parse a Sipro h file
 void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::string>& issues, const bool fussy)
 {
-    // Get the raw defines
-    const std::vector<RawDefine> defines = do_parse(buf, issues, fussy);
-    if( defines.empty() ) throw std::runtime_error("No defines found");
-
-    // Now I'll convert the suitable defines to plc variable descriptors
+    // Prepare the library containers for header data
     lib.global_variables().groups().emplace_back();
     lib.global_variables().groups().back().set_name("Header_Variables");
     lib.global_constants().groups().emplace_back();
     lib.global_constants().groups().back().set_name("Header_Constants");
-    for( auto& def : defines )
+
+    Parser parser(buf, issues, fussy);
+    while( const DefineRef def = parser.next_define() )
        {
         //DBGLOG("Define - label=\"{}\" value=\"{}\" comment=\"{}\" predecl=\"{}\"\n", def.label(), def.value(), str::iso_latin1_to_utf8(def.comment()), def.comment_predecl())
 
@@ -412,7 +433,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                }
             //else
             //   {
-            //    DBGLOG(" - label=\"{}\" value=\"{}\" {}\n", def.label(), def.value(), def.comment_predecl())
+            //    DBGLOG({} " not exported: label=\"{}\" value=\"{}\" {}\n", def.comment_predecl(), def.label(), def.value())
             //   }
            }
 
@@ -421,10 +442,18 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             throw fmtstr::error("Unrecognized define {} {}", def.label(), def.value());
            }
        }
+
+    if( lib.global_variables().groups().back().variables().empty() &&
+        lib.global_constants().groups().back().variables().empty() )
+       {
+        if(fussy) throw std::runtime_error("No exportable defines found");
+        else issues.push_back("No exportable defines found");
+       }
 }
 
-}//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
+
+}//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 
 //---- end unit -------------------------------------------------------------

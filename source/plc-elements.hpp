@@ -29,20 +29,19 @@ namespace plc //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 {
 
 // Built in numeric types
-static constexpr std::array<std::string_view,16> num_types =
+static constexpr std::array<std::string_view,15> num_types =
    {
     "BOOL"sv,   // [1] BOOLean [FALSE|TRUE]
-    "SINT"sv,   // [1] Short INTeger [-128 … +127]
+    "SINT"sv,   // [1] Short INTeger [-128 … 127]
     "INT"sv,    // [2] INTeger [-32768 … +32767]
-    "DINT"sv,   // [4] Double [INTeger -2147483648 … +2147483647]
-    "LINT"sv,   // [8] Long INTeger [-2^63 … +2^63-1]
-    "USINT"sv,  // [1] Unsigned Short INTeger [0 … +255]
-    "UINT"sv,   // [2] Unsigned INTeger [0 … +65535]
-    "UDINT"sv,  // [4] Unsigned Double INTeger [0 … +4294967295]
-    "ULINT"sv,  // [8] Unsigned Long INTeger [0 … +2^64-1]
-    "REAL"sv,   // [4] REAL number [±10^+38]
-    "LREAL"sv,  // [8] Long REAL number [±10^+308]
-    "BOOL"sv,   // [1] 1 bit
+    "DINT"sv,   // [4] Double INTeger [-2147483648 … 2147483647]
+    "LINT"sv,   // [8] Long INTeger [-2^63 … 2^63-1]
+    "USINT"sv,  // [1] Unsigned Short INTeger [0 … 255]
+    "UINT"sv,   // [2] Unsigned INTeger [0 … 65535]
+    "UDINT"sv,  // [4] Unsigned Double INTeger [0 … 4294967295]
+    "ULINT"sv,  // [8] Unsigned Long INTeger [0 … 2^64-1]
+    "REAL"sv,   // [4] REAL number [±10^38]
+    "LREAL"sv,  // [8] Long REAL number [±10^308]
     "BYTE"sv,   // [1] 1 byte
     "WORD"sv,   // [2] 2 bytes
     "DWORD"sv,  // [4] 4 bytes
@@ -158,8 +157,16 @@ class Variable
     void set_length(const std::size_t n) { i_Length = n; }
 
     bool is_array() const noexcept { return i_ArrayDim>0; }
-    std::size_t arraydim() const noexcept { return i_ArrayDim; }
-    void set_arraydim(const std::size_t n) { i_ArrayDim = n; }
+    std::size_t array_dim() const noexcept { return i_ArrayDim; }
+    std::size_t array_startidx() const noexcept { return i_ArrayFirstIdx; }
+    std::size_t array_lastidx() const noexcept { return i_ArrayFirstIdx + i_ArrayDim - 1u; } 
+    void set_array_range(const std::size_t idx_start, const std::size_t idx_last)
+       {
+        if( idx_start >= idx_last ) throw std::runtime_error(fmt::format("Invalid array range {}..{} of variable \"{}\"", idx_start, idx_last, name()));
+        //if( idx_start!=0u ) throw std::runtime_error(fmt::format("Invalid array start index {} of variable \"{}\"", start_idx, name()));
+        i_ArrayFirstIdx = idx_start;
+        i_ArrayDim = idx_last - idx_start + 1u;
+       }
 
     std::string_view value() const noexcept { return i_Value; }
     void set_value(const std::string_view s)
@@ -178,7 +185,8 @@ class Variable
     VariableAddress i_Address;
     std::string_view i_Type;
     std::size_t i_Length = 0;
-    std::size_t i_ArrayDim = 0;
+    std::size_t i_ArrayFirstIdx = 0,
+                i_ArrayDim = 0;
     std::string_view i_Value;
     std::string_view i_Descr;
 };
@@ -187,7 +195,7 @@ class Variable
 
 /////////////////////////////////////////////////////////////////////////////
 // A named group of variables
-class Variables_Group ///////////////////////////////////////////////////////
+class Variables_Group
 {
  public:
     std::string_view name() const noexcept { return i_Name; }
@@ -278,7 +286,8 @@ class TypeDef
     explicit TypeDef(const Variable& var) : i_Name(var.name()),
                                             i_Type(var.type()),
                                             i_Length(var.length()),
-                                            i_ArrayDim(var.arraydim()),
+                                            i_ArrayFirstIdx(var.array_startidx()),
+                                            i_ArrayDim(var.array_dim()),
                                             i_Descr(var.descr())
        {
         if( var.has_value() ) throw std::runtime_error(fmt::format("Typedef \"{}\" cannot have a value ({})", var.name(), var.value()));
@@ -304,7 +313,9 @@ class TypeDef
     std::size_t length() const noexcept { return i_Length; }
 
     bool is_array() const noexcept { return i_ArrayDim>0; }
-    std::size_t arraydim() const noexcept { return i_ArrayDim; }
+    std::size_t array_dim() const noexcept { return i_ArrayDim; }
+    std::size_t array_startidx() const noexcept { return i_ArrayFirstIdx; }
+    std::size_t array_lastidx() const noexcept { return i_ArrayFirstIdx + i_ArrayDim - 1u; }
 
     std::string_view descr() const noexcept { return i_Descr; }
     void set_descr(const std::string_view s) noexcept { i_Descr = s; }
@@ -314,7 +325,8 @@ class TypeDef
     std::string_view i_Name;
     std::string_view i_Type;
     std::size_t i_Length = 0;
-    std::size_t i_ArrayDim = 0;
+    std::size_t i_ArrayFirstIdx = 0,
+                i_ArrayDim = 0;
     std::string_view i_Descr;
 };
 
@@ -393,9 +405,9 @@ class Subrange
         i_Type = s;
        }
 
-    double min_value() const noexcept { return i_MinVal; }
-    double max_value() const noexcept { return i_MaxVal; }
-    void set_range(const double min_val, const double max_val)
+    int min_value() const noexcept { return i_MinVal; }
+    int max_value() const noexcept { return i_MaxVal; }
+    void set_range(const int min_val, const int max_val)
        {
         if( max_val < min_val ) throw std::runtime_error(fmt::format("Invalid range {}..{} of subrange \"{}\"", min_val, max_val, name()));
         i_MinVal = min_val;
@@ -409,8 +421,8 @@ class Subrange
  private:
     std::string_view i_Name;
     std::string_view i_Type;
-    double i_MinVal = 0.0,
-           i_MaxVal = 0.0;
+    int i_MinVal = 0,
+        i_MaxVal = 0;
     std::string_view i_Descr;
 };
 
@@ -609,6 +621,21 @@ class Library
     //const std::vector<Interface>& interfaces() const noexcept { return i_Interfaces; }
     //std::vector<Interface>& interfaces() noexcept { return i_Interfaces; }
 
+    bool is_empty() const noexcept
+       {
+        return     global_constants().size()==0
+                && global_retainvars().size()==0
+                && global_variables().size()==0
+                && programs().empty()
+                && function_blocks().empty()
+                && functions().empty()
+                && macros().empty()
+                && structs().empty()
+                && typedefs().empty()
+                && enums().empty()
+                && subranges().empty();
+                // && interfaces().empty();
+       }
 
     void check() const
        {
@@ -680,6 +707,64 @@ class Library
         //if( !interfaces().empty() ) s += ", " + std::to_string(interfaces().size()) + " interfaces";
         return s;
        }
+
+    //---------------------------------------------------------------------------
+    //void write(const sys::file_write& f) const
+    //{
+    //    f << "\nglobal vars:\n"sv;
+    //    for( const auto& group : global_variables().groups() )
+    //       {
+    //        f << "    \""sv << group.name() << "\"\n"sv;
+    //        for( const auto& var : group.variables() )
+    //           {
+    //            f << "        "sv << var.name() << '\n';
+    //           }
+    //       }
+    //
+    //    f << "\nFunctions:\n"sv;
+    //    for( const auto& pou : functions() )
+    //       {
+    //        f << "    "sv << pou.name() << ':'  << pou.return_type() <<  '\n';
+    //       }
+    //
+    //    f << "\nFunction blocks:\n"sv;
+    //    for( const auto& pou : function_blocks() )
+    //       {
+    //        f << "    "sv << pou.name() << '\n';
+    //       }
+    //
+    //    f << "\nPrograms:\n"sv;
+    //    for( const auto& pou : programs() )
+    //       {
+    //        f << "    "sv << pou.name() << '\n';
+    //       }
+    //
+    //    f << "\nmacros:\n"sv;
+    //    for( const auto& macro : macros() )
+    //       {
+    //        f << "    "sv << macro.name() << '\n';
+    //        for( const auto& par : macro.parameters() )
+    //           {
+    //            f << "        "sv << par.name() << '\n';
+    //           }
+    //       }
+    //
+    //    f << "\ntypedefs:\n"sv;
+    //    for( const auto& tdef : typedefs() )
+    //       {
+    //        f << "    "sv << tdef.name() << '\n';
+    //       }
+    //
+    //    f << "\nenums:\n"sv;
+    //    for( const auto& en : enums() )
+    //       {
+    //        f << "    "sv << en.name() << '\n';
+    //        for( const auto& elem : en.elements() )
+    //           {
+    //            f << "        "sv << elem.name() << '\n';
+    //           }
+    //       }
+    //}
 
  private:
     std::string i_Name;
