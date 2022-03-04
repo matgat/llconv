@@ -254,89 +254,89 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         int result = (buf[i]-'0');
         const int base = 10;
         while( ++i<siz && std::isdigit(buf[i]) ) result = (base*result) + (buf[i]-'0');
-        return result;
+        return sign * result;
        };
 
     //---------------------------------
     // Read a (base10) floating point number literal
-    auto extract_double = [&]() -> double
-       {
-        // [sign]
-        int sgn = 1;
-        if( buf[i]=='-' ) {sgn = -1; ++i;}
-        else if( buf[i]=='+' ) ++i;
-
-        // [mantissa - integer part]
-        double mantissa = 0;
-        bool found_mantissa = false;
-        if( std::isdigit(buf[i]) )
-           {
-            found_mantissa = true;
-            do {
-                mantissa = (10.0 * mantissa) + static_cast<double>(buf[i] - '0');
-                //if( buf[++i] == '\'' ); // Skip thousand separator char
-               }
-            while( std::isdigit(buf[i]) );
-           }
-        // [mantissa - fractional part]
-        if( buf[i] == '.' )
-           {
-            ++i;
-            double k = 0.1; // shift of decimal part
-            if( std::isdigit(buf[i]) )
-               {
-                found_mantissa = true;
-                do {
-                    mantissa += k * static_cast<double>(buf[i] - '0');
-                    k *= 0.1;
-                    ++i;
-                   }
-                while( std::isdigit(buf[i]) );
-               }
-           }
-
-        // [exponent]
-        int exp=0, exp_sgn=1;
-        bool found_expchar = false,
-             found_expval = false;
-        if( buf[i] == 'E' || buf[i] == 'e' )
-           {
-            found_expchar = true;
-            ++i;
-            // [exponent sign]
-            if( buf[i] == '-' ) {exp_sgn = -1; ++i;}
-            else if( buf[i] == '+' ) ++i;
-            // [exponent value]
-            if( std::isdigit(buf[i]) )
-               {
-                found_expval = true;
-                do {
-                    exp = (10 * exp) + static_cast<int>(buf[i] - '0');
-                    ++i;
-                   }
-                while( std::isdigit(buf[i]) );
-               }
-           }
-        if( found_expchar && !found_expval ) throw fmtstr::error("Invalid floating point number: No exponent value"); // ex "123E"
-
-        // [calculate result]
-        double result = 0.0;
-        if( found_mantissa )
-          {
-           result = sgn * mantissa * std::pow(10.0, exp_sgn*exp);
-          }
-        else if( found_expval )
-           {
-            result = sgn * std::pow(10.0,exp_sgn*exp); // ex "E100"
-           }
-        else
-           {
-            throw fmtstr::error("Invalid floating point number");
-            //if(found_expchar) result = 1.0; // things like 'E,+E,-exp,exp+,E-,...'
-            //else result = std::numeric_limits<double>::quiet_NaN(); // things like '+,-,,...'
-           }
-        return result;
-       };
+    //auto extract_double = [&]() -> double
+    //   {
+    //    // [sign]
+    //    int sgn = 1;
+    //    if( buf[i]=='-' ) {sgn = -1; ++i;}
+    //    else if( buf[i]=='+' ) ++i;
+    //
+    //    // [mantissa - integer part]
+    //    double mantissa = 0;
+    //    bool found_mantissa = false;
+    //    if( std::isdigit(buf[i]) )
+    //       {
+    //        found_mantissa = true;
+    //        do {
+    //            mantissa = (10.0 * mantissa) + static_cast<double>(buf[i] - '0');
+    //            //if( buf[++i] == '\'' ); // Skip thousand separator char
+    //           }
+    //        while( std::isdigit(buf[i]) );
+    //       }
+    //    // [mantissa - fractional part]
+    //    if( buf[i] == '.' )
+    //       {
+    //        ++i;
+    //        double k = 0.1; // shift of decimal part
+    //        if( std::isdigit(buf[i]) )
+    //           {
+    //            found_mantissa = true;
+    //            do {
+    //                mantissa += k * static_cast<double>(buf[i] - '0');
+    //                k *= 0.1;
+    //                ++i;
+    //               }
+    //            while( std::isdigit(buf[i]) );
+    //           }
+    //       }
+    //
+    //    // [exponent]
+    //    int exp=0, exp_sgn=1;
+    //    bool found_expchar = false,
+    //         found_expval = false;
+    //    if( buf[i] == 'E' || buf[i] == 'e' )
+    //       {
+    //        found_expchar = true;
+    //        ++i;
+    //        // [exponent sign]
+    //        if( buf[i] == '-' ) {exp_sgn = -1; ++i;}
+    //        else if( buf[i] == '+' ) ++i;
+    //        // [exponent value]
+    //        if( std::isdigit(buf[i]) )
+    //           {
+    //            found_expval = true;
+    //            do {
+    //                exp = (10 * exp) + static_cast<int>(buf[i] - '0');
+    //                ++i;
+    //               }
+    //            while( std::isdigit(buf[i]) );
+    //           }
+    //       }
+    //    if( found_expchar && !found_expval ) throw fmtstr::error("Invalid floating point number: No exponent value"); // ex "123E"
+    //
+    //    // [calculate result]
+    //    double result = 0.0;
+    //    if( found_mantissa )
+    //      {
+    //       result = sgn * mantissa * std::pow(10.0, exp_sgn*exp);
+    //      }
+    //    else if( found_expval )
+    //       {
+    //        result = sgn * std::pow(10.0,exp_sgn*exp); // ex "E100"
+    //       }
+    //    else
+    //       {
+    //        throw fmtstr::error("Invalid floating point number");
+    //        //if(found_expchar) result = 1.0; // things like 'E,+E,-exp,exp+,E-,...'
+    //        //else result = std::numeric_limits<double>::quiet_NaN(); // things like '+,-,,...'
+    //       }
+    //    return result;
+    //   };
 
     //---------------------------------
     //auto collect_until_char_same_line = [&](const char c) -> std::string_view

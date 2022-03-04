@@ -223,7 +223,7 @@ template<typename F> void parse_buffer(F parsefunct, const std::string_view buf,
 
 //---------------------------------------------------------------------------
 // Write PLC library to plclib format
-inline [[maybe_unused]] fs::path write_plclib(const plcb::Library& lib, const std::string& in_base_name, const Arguments& args)
+[[maybe_unused]] inline fs::path write_plclib(const plcb::Library& lib, const std::string& in_base_name, const Arguments& args)
 {
     //if( args.output_isdir() )
     //   {// Create a 'plclib' file in the output directory
@@ -242,7 +242,7 @@ inline [[maybe_unused]] fs::path write_plclib(const plcb::Library& lib, const st
 
 //---------------------------------------------------------------------------
 // Write PLC library to pll format
-inline [[maybe_unused]] fs::path write_pll(const plcb::Library& lib, const std::string& in_base_name, const Arguments& args)
+[[maybe_unused]] inline fs::path write_pll(const plcb::Library& lib, const std::string& in_base_name, const Arguments& args)
 {
     //if( args.output_isdir() )
     //   {// Create a 'plclib' file in the output directory

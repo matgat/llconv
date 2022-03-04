@@ -141,6 +141,135 @@ void launch(const std::string& pth, const std::string& args ="") noexcept
   #endif
 }
 
+//#include <unistd.h>
+//#include <sys/types.h>
+//int foo(char *adr[])
+//{
+//        pid_t pid;
+//
+//        pid=fork();
+//        if (pid==0)
+//        {
+//                if (execv("/usr/bin/mozilla",adr)<0)
+//                        return -1;
+//                else
+//                        return 1;
+//        }
+//        else if(pid>0)
+//                return 2;
+//        else
+//                return 0;
+//}
+
+// sh_cmd() - executes a command in the background
+// returns TRUE is command was executed (not the result of the command though..)
+//static gint sh_cmd (gchar * path, gchar * cmd, gchar * args)
+//{
+//  gchar     cmd_line[256];
+//  gchar   **argv;
+//  gint      argp;
+//  gint      rc = 0;
+//
+//  if (cmd == NULL)
+//    return FALSE;
+//
+//  if (cmd[0] == '\0')
+//    return FALSE;
+//
+//  if (path != NULL)
+//    chdir (path);
+//
+//  snprintf (cmd_line, sizeof (cmd_line), "%s %s", cmd, args);
+//
+//  rc = g_shell_parse_argv (cmd_line, &argp, &argv, NULL);
+//  if (!rc)
+//  {
+//    g_strfreev (argv);
+//    return rc;
+//  }
+//
+//  rc = g_spawn_async (path, argv, NULL,
+//          G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_SEARCH_PATH,
+//          NULL, NULL, NULL, NULL);
+//
+//  g_strfreev (argv);
+//
+//  return rc;
+//}
+
+// static gint get_new_ptable (P_Fah_monitor fm)
+// {
+//  gint   i_retcode = 0, i_exitcode = 0;
+//  gchar cv_filename[384];
+//
+// #ifdef DLOGIC
+//   g_message (CONFIG_NAME":> Entered get_new_ptable(%d)...\n",fm->cb_id);
+// #endif
+//
+//   if ( fm->i_stanford_points )   // TRUE if point table IS out of date
+//   {
+//     chdir ( fm->path_string );
+//
+//     i_retcode = g_spawn_command_line_sync (
+//                      g_strdup_printf ("wget -N %s", STANDFORD_FAHPOINTS_URL),
+//                                          NULL, NULL, &i_exitcode, NULL);
+//
+//     if( i_retcode )
+//     {
+//      ... good if retcode = 0
+//     }
+
+//#include <stdlib.h>
+//#include <unistd.h>
+//#include <sys/types.h>
+//#include <sys/wait.h>
+//#include <errno.h>
+// Launch preferred application (in parallel) to open the specified file.
+// The function returns errno for (apparent) success,
+// and nonzero error code otherwise.
+// Note that error cases are visually reported by xdg-open to the user,
+// so that there is no need to provide error messages to user.
+//int open_preferred(const char *const filename)
+//{
+//    const char *const args[3] = { "xdg-open", filename, NULL };
+//    pid_t child, p;
+//    int status;
+//
+//    if (!filename || !*filename)
+//        return errno = EINVAL; // Invalid file name
+//
+//    // Fork a child process.
+//    child = fork();
+//    if (child == (pid_t)-1)
+//        return errno = EAGAIN; // Out of resources, or similar
+//
+//    if (!child) {
+//        // Child process. Execute.
+//        execvp(args[0], (char **)args);
+//        // Failed. Return 3, "a required too could not be found".
+//        exit(3);
+//    }
+//
+//    // Parent process. Wait for child to exit.
+//    do {
+//        p = waitpid(child, &status, 0);
+//    } while (p == (pid_t)-1 && errno == EINTR);
+//    if (p != child)
+//        return errno = ECHILD; // Failed; child process vanished
+//
+//    // Did the child process exit normally?
+//    if (!WIFEXITED(status))
+//        return errno = ECHILD; // Child process was aborted
+//
+//    switch (WEXITSTATUS(status)) {
+//    case 0:  return errno = 0;       // Success
+//    case 1:  return errno = EINVAL;  // Error in command line syntax
+//    case 2:  return errno = ENOENT;  // File not found
+//    case 3:  return errno = ENODEV;  // Application not found
+//    default: return errno = EAGAIN;  // Failed for other reasons.
+//    }
+//}
+
 
 //---------------------------------------------------------------------------
 void edit_text_file(const std::string& pth, const std::size_t offset) noexcept
