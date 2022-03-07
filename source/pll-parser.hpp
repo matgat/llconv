@@ -651,7 +651,20 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         while( i<siz )
            {
             do{ skip_blanks(); } while( eat_line_end() ); // Skip empty lines
-            if( eat_string("END_STRUCT;"sv) ) break;
+            if( eat_string("END_STRUCT;"sv) )
+               {
+                break;
+               }
+            else if( eat_line_end() )
+               {// Nella lista membri ammetto righe vuote
+                continue;
+               }
+            else if( eat_comment_start() )
+               {// Nella lista membri ammetto righe di commento
+                skip_comment();
+                continue;
+               }
+
             strct.members().push_back( collect_variable() );
             // Some checks
             //if( strct.members().back().has_value() ) throw fmtstr::error("Struct member \"{}\" cannot have a value ({})", strct.members().back().name(), strct.members().back().value());
@@ -919,8 +932,14 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                     //(* Body *)
                     //END_POU
                     skip_blanks();
-                    if(i>=siz) throw fmtstr::error("{} not closed by {}", collecting.pou_start, collecting.pou_end);
-                    else if( substatus!=SUB::GET_BODY && eat_line_end() ) continue;
+                    if(i>=siz)
+                       {
+                        throw fmtstr::error("{} not closed by {}", collecting.pou_start, collecting.pou_end);
+                       }
+                    else if( substatus!=SUB::GET_BODY && eat_line_end() )
+                       {// Sono ammesse righe vuote
+                        continue;
+                       }
                     else
                        {
                         switch(substatus)
@@ -1126,8 +1145,17 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                     //    vbMsgs AT %MB300.6000 : ARRAY[ 0..999 ] OF BOOL; { DE:"ivbMsgs Array messaggi attivati !MAX_MESSAGES!" }
                     //    END_VAR
                     skip_blanks();
-                    if(i>=siz) throw fmtstr::error("VAR_GLOBAL not closed by END_VAR");
-                    else if( eat_line_end() ) continue;
+                    if( i>=siz )
+                       {
+                        throw fmtstr::error("VAR_GLOBAL not closed by END_VAR");
+                       }
+                    else if( eat_line_end() )
+                       {// Nella lista variabili sono ammesse righe vuote
+                       }
+                    else if( eat_comment_start() )
+                       {// Nella lista variabili sono ammesse righe di commento
+                        skip_comment();
+                       }
                     else if( is_directive() )
                        {
                         const plcb::Directive dir = collect_directive();

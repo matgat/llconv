@@ -360,7 +360,12 @@ class Parser
            }
         else
            {
-            notify_error("Define {} hasn't a comment", def.label());
+            //notify_error("Define {} hasn't a comment", def.label());
+            // Expecting a line end
+            if( !eat_line_end() )
+               {
+                notify_error("Unexpected content after define: {}", str::escape(skip_line()));
+               }
            }
 
         //DBGLOG("    [*] Collected define: label=\"{}\" value=\"{}\" comment=\"{}\"\n", def.label(), def.value(), def.comment())
@@ -405,7 +410,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             var.set_name( def.label() );
             var.set_type( reg.iec_type() );
             if( reg.is_va() ) var.set_length( reg.get_va_length() );
-            var.set_descr( def.comment() );
+            if( def.has_comment() ) var.set_descr( def.comment() );
 
             var.address().set_type( reg.iec_address_type() );
             var.address().set_typevar( reg.iec_address_vartype() );
@@ -427,20 +432,20 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                 var.set_type( def.comment_predecl() );
 
                 var.set_value( def.value() );
-                var.set_descr( def.comment() );
+                if( def.has_comment() ) var.set_descr( def.comment() );
 
                 lib.global_constants().groups().back().variables().push_back( var );
                }
             //else
             //   {
-            //    DBGLOG({} " not exported: label=\"{}\" value=\"{}\" {}\n", def.comment_predecl(), def.label(), def.value())
+            //    issues.push_back(fmt::format("{} value not exported: {}={} ({})", def.comment_predecl(), def.label(), def.value()));
             //   }
            }
 
-        else
-           {
-            throw fmtstr::error("Unrecognized define {} {}", def.label(), def.value());
-           }
+        //else if( superfussy )
+        //   {
+        //    issues.push_back(fmt::format("Define not exported: {}={}"sv, def.label(), def.value()));
+        //   }
        }
 
     if( lib.global_variables().groups().back().variables().empty() &&

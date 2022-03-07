@@ -202,31 +202,29 @@ void write(const sys::file_write& f, const plcb::Library& lib, [[maybe_unused]] 
 
     // [Heading]
     f<< "(*\n"sv
-     << "    name: "sv << lib.name() << '\n'
-     << "    descr: "sv << lib.descr() << '\n'
-     << "    version: "sv << lib.version() << '\n'
-     << "    author: llconv pll::write()\n"sv
-     << "    date: "sv << sys::human_readable_time_stamp() << '\n'
-     << "*)\n"sv;
-
-    // [Content summary]
-    //f<< "(*\n"sv
-    // << "    global constants: "sv << std::to_string(lib.global_constants().size())  << '\n'
-    // << "    global retain vars: "sv << std::to_string(lib.global_retainvars().size())  << '\n'
-    // << "    global variables: "sv << std::to_string(lib.global_variables().size())  << '\n'
-    // << "    function blocks: "sv << std::to_string(lib.function_blocks().size())  << '\n'
-    // << "    functions: "sv << std::to_string(lib.functions().size())  << '\n'
-    // << "    programs: "sv << std::to_string(lib.programs().size())  << '\n'
-    // << "    macros: "sv << std::to_string(lib.macros().size())  << '\n'
-    // << "    structs: "sv << std::to_string(lib.structs().size())  << '\n'
-    // << "    typedefs: "sv << std::to_string(lib.typedefs().size())  << '\n'
-    // << "    enums: "sv << std::to_string(lib.enums().size())  << '\n'
-    // << "    subranges: "sv << std::to_string(lib.subranges().size())  << '\n'
-    // //<< "    interfaces: "sv << std::to_string(lib.interfaces().size())  << '\n'
-    // << "*)\n"sv;
+     << "\tname: "sv << lib.name() << '\n'
+     << "\tdescr: "sv << lib.descr() << '\n'
+     << "\tversion: "sv << lib.version() << '\n'
+     << "\tauthor: llconv pll::write()\n"sv
+     << "\tdate: "sv << sys::human_readable_time_stamp() << "\n\n"sv;
+    // Content summary
+    if( !lib.global_variables().is_empty() )  f<< "\tglobal-variables: "sv << std::to_string(lib.global_variables().size())  << '\n';
+    if( !lib.global_constants().is_empty() )  f<< "\tglobal-constants: "sv << std::to_string(lib.global_constants().size())  << '\n';
+    if( !lib.global_retainvars().is_empty() ) f<< "\tglobal-retain-vars: "sv << std::to_string(lib.global_retainvars().size())  << '\n';
+    if( !lib.functions().empty() )            f<< "\tfunctions: "sv << std::to_string(lib.functions().size())  << '\n';
+    if( !lib.function_blocks().empty() )      f<< "\tfunction blocks: "sv << std::to_string(lib.function_blocks().size())  << '\n';
+    if( !lib.programs().empty() )             f<< "\tprograms: "sv << std::to_string(lib.programs().size())  << '\n';
+    if( !lib.macros().empty() )               f<< "\tmacros: "sv << std::to_string(lib.macros().size())  << '\n';
+    if( !lib.structs().empty() )              f<< "\tstructs: "sv << std::to_string(lib.structs().size())  << '\n';
+    if( !lib.typedefs().empty() )             f<< "\ttypedefs: "sv << std::to_string(lib.typedefs().size())  << '\n';
+    if( !lib.enums().empty() )                f<< "\tenums: "sv << std::to_string(lib.enums().size())  << '\n';
+    if( !lib.subranges().empty() )            f<< "\tsubranges: "sv << std::to_string(lib.subranges().size())  << '\n';
+    //if( !lib.interfaces().empty() )           f<< "\tinterfaces: "sv << std::to_string(lib.interfaces().size())  << '\n';
+    f << "*)\n"sv;
 
     // [Global variables]
-    if( !lib.global_variables().is_empty() )
+    if( !lib.global_variables().is_empty() ||
+        !lib.global_retainvars().is_empty() )
        {
         f<< sects_spacer <<
             "\t(****************************)\n"

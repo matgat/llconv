@@ -680,7 +680,7 @@ class Library
         std::sort(macros().begin(), macros().end(), [](const Macro& a, const Macro& b) noexcept -> bool { return a.name() < b.name(); });
         std::sort(typedefs().begin(), typedefs().end(), [](const TypeDef& a, const TypeDef& b) noexcept -> bool { return a.name() < b.name(); });
         std::sort(enums().begin(), enums().end(), [](const Enum& a, const Enum& b) noexcept -> bool { return a.name() < b.name(); });
-        //std::sort(subranges().begin(), subranges().end(), [](const Subrange& a, const Subrange& b) noexcept -> bool { return a.name() < b.name(); });
+        std::sort(subranges().begin(), subranges().end(), [](const Subrange& a, const Subrange& b) noexcept -> bool { return a.name() < b.name(); });
         //std::sort(interfaces().begin(), interfaces().end(), [](const Interface& a, const Interface& b) noexcept -> bool { return a.name() < b.name(); });
 
         //for( auto& pou : programs() )        pou.sort_variables();
@@ -703,7 +703,7 @@ class Library
         if( !structs().empty() ) s += ", " + std::to_string(structs().size()) + " structs";
         if( !typedefs().empty() ) s += ", " + std::to_string(typedefs().size()) + " typedefs";
         if( !enums().empty() ) s += ", " + std::to_string(enums().size()) + " enums";
-        //if( !subranges().empty() ) s += ", " + std::to_string(subranges().size()) + " subranges";
+        if( !subranges().empty() ) s += ", " + std::to_string(subranges().size()) + " subranges";
         //if( !interfaces().empty() ) s += ", " + std::to_string(interfaces().size()) + " interfaces";
         return s;
        }

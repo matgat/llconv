@@ -181,7 +181,7 @@ class Arguments
 
 //---------------------------------------------------------------------------
 // Import a file
-template<typename F> void parse_buffer(F parsefunct, const std::string_view buf, const std::string& path, plcb::Library& lib, const Arguments& args, std::vector<std::string>& issues)
+template<typename F> void parse_buffer(F parsefunct, const std::string_view buf, const fs::path& pth, const std::string& str_pth, plcb::Library& lib, const Arguments& args, std::vector<std::string>& issues)
 {
     std::vector<std::string> parse_issues;
     try{
@@ -189,7 +189,7 @@ template<typename F> void parse_buffer(F parsefunct, const std::string_view buf,
        }
     catch( fmtstr::parse_error& e)
        {
-        sys::edit_text_file( path, e.pos() );
+        sys::edit_text_file( str_pth, e.pos() );
         throw;
        }
     if(args.verbose()) std::cout << "    " << lib.to_str() << '\n';
@@ -198,13 +198,15 @@ template<typename F> void parse_buffer(F parsefunct, const std::string_view buf,
     if( !parse_issues.empty() )
        {
         // Append to overall issues list
-        issues.push_back( fmt::format("____Parsing of {}",path) );
+        issues.push_back( fmt::format("____Parsing of {}",str_pth) );
         issues.insert(issues.end(), parse_issues.begin(), parse_issues.end());
         // Log in a file
-        const std::string log_file_path{ str::replace_extension(path, ".log") }; // fs::temp_directory_path()
+        //const std::string log_file_path{ str::replace_extension(str_pth, ".log") }; // Same folder as input
+        //const std::string log_file_path{ (fs::temp_directory_path() / pth.filename()).replace_extension(".log").string() }; // Temporary folder
+        const std::string log_file_path{ (args.output() / pth.filename()).concat(".log").string() }; // In output folder
         sys::file_write log_file_write( log_file_path );
         log_file_write << sys::human_readable_time_stamp() << '\n';
-        log_file_write << "[Parse log of "sv << path << "]\n"sv;
+        log_file_write << "[Parse log of "sv << str_pth << "]\n"sv;
         for(const std::string& issue : parse_issues)
            {
             log_file_write << "[!] "sv << issue << '\n';
@@ -216,11 +218,11 @@ template<typename F> void parse_buffer(F parsefunct, const std::string_view buf,
     lib.check(); // throws if something's wrong
     if( lib.is_empty() )
         {
-         issues.push_back( fmt::format("{} generated an empty library",path) );
+         issues.push_back( fmt::format("{} generated an empty library",str_pth) );
         }
 
     // Manipulate the result
-    //const auto [ctime, mtime] = sys::get_file_dates(path);
+    //const auto [ctime, mtime] = sys::get_file_dates(str_pth);
     //std::cout << "created:" << sys::human_readable_time_stamp(ctime) << " modified:" << sys::human_readable_time_stamp(mtime) << '\n';
     //lib.set_dates(ctime, mtime);
     if( args.options().contains("sort")) // args.options().value_of("sort")=="name"
@@ -326,9 +328,18 @@ int main( int argc, const char* argv[] )
                    {
                     std::cout << "Cleared " << removed_count << " files in " << args.output().string() << '\n';
                    }
+                // Check uncleared files
+                // Nota: nella directory di sviluppo posso avere ".gitignore"
                 if( !fs::is_empty(args.output()) )
                    {
-                    issues.push_back("Output directory contains uncleared files");
+                    //issues.push_back("Output directory contains uncleared files");
+                    for( const auto& elem : fs::directory_iterator(args.output()) )
+                       {
+                        if( !elem.path().filename().string().starts_with('.') )
+                           {
+                            issues.push_back(fmt::format("Uncleared file in output dir: {}", elem.path().string()));
+                           }
+                       }
                    }
                }
            }
@@ -338,13 +349,13 @@ int main( int argc, const char* argv[] )
             // Prepare the file buffer
             // Note: Extension not recognized is an exceptional case,
             //       so there's nor arm to confidently open the file
-            const std::string file_path{pth.string()};
-            const sys::MemoryMappedFile file_buf(file_path); // Do not deallocate until the very end!
+            const std::string str_pth{pth.string()};
+            const sys::MemoryMappedFile file_buf(str_pth); // Do not deallocate until the very end!
 
             // Show file name and size
             if( args.verbose() )
                {
-                std::cout << "Processing " << file_path;
+                std::cout << "Processing " << str_pth;
                 std::cout << " (size: ";
                 if(file_buf.size()>1048576) std::cout << file_buf.size()/1048576 << "MB)\n";
                 else if(file_buf.size()>1024) std::cout << file_buf.size()/1024 << "KB)\n";
@@ -358,7 +369,7 @@ int main( int argc, const char* argv[] )
             const std::string ext {str::tolower(pth.extension().string())};
             if( ext == ".pll" )
                {// pll -> plclib
-                parse_buffer(pll::parse, file_buf.as_string_view(), file_path, lib, args, issues);
+                parse_buffer(pll::parse, file_buf.as_string_view(), pth, str_pth, lib, args, issues);
               #ifdef PLL_TEST
                 test_pll(fbasename, lib, args, issues);
               #else
@@ -367,7 +378,7 @@ int main( int argc, const char* argv[] )
                }
             else if( ext == ".h" )
                {// h -> pll,plclib
-                parse_buffer(h::parse, file_buf.as_string_view(), file_path, lib, args, issues);
+                parse_buffer(h::parse, file_buf.as_string_view(), pth, str_pth, lib, args, issues);
                 write_pll(lib, fbasename, args);
                 write_plclib(lib, fbasename, args);
                }

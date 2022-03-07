@@ -18,6 +18,7 @@
   #ifdef MS_WINDOWS
     #include <Windows.h>
     //#include <unistd.h> // _stat
+    #include <shellapi.h> // FindExecutableA
   #else
     #include <fcntl.h> // open
     #include <sys/mman.h> // mmap, munmap

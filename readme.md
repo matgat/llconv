@@ -30,10 +30,9 @@ Input files must:
 
 #### Syntax
 * _IEC 61131-3_ multidimensional arrays like `ARRAY[1..2, 1..2]` not supported
-* `.h` `#define`s are required to have a line comment (`// ...`) containing the description
-* Descriptions (`.h` `#define`s comment and `.pll` `{DE: ...}`) cannot contain XML special characters nor line breaks\
+* Descriptions (`.h` `#define` comments and `.pll` `{DE: ...}`) cannot contain XML special characters nor line breaks\
   _Rationale: Parsing is much more faster without dynamic allocations to
-              store a modified input (in this case to escape characters)_
+              store a modified input (in this case the escaped characters)_
 
 
 
