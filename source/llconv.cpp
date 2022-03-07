@@ -64,6 +64,10 @@ class Arguments
                                {
                                 i_verbose = true;
                                }
+                            else if( swtch=="clear"sv )
+                               {
+                                i_clear = true;
+                               }
                             else if( swtch=="options"sv )
                                {
                                 status = STS::GET_OPTS; // stringlist expected
@@ -141,6 +145,7 @@ class Arguments
        {
         std::cerr << "\nUsage:\n"
                      "   llconv -fussy -verbose -options sort,schemaver:2.8 path/to/*.pll -output path/\n"
+                     "       -clear (Delete existing files in output folder. Use with care!)\n"
                      "       -fussy (Handle issues as blocking errors)\n"
                      "       -help (Just print help info and abort)\n"
                      "       -options (LogicLab plclib schema version)\n"
@@ -154,16 +159,21 @@ class Arguments
     const auto& files() const noexcept { return i_files; }
     const auto& output() const noexcept { return i_output; }
     bool output_isdir() const noexcept { return i_output_isdir; }
+    bool output_isdefault() const noexcept { return i_output==i_default_output; }
     bool fussy() const noexcept { return i_fussy; }
     bool verbose() const noexcept { return i_verbose; }
+    bool clear() const noexcept { return i_clear; }
     const str::keyvals& options() const noexcept { return i_options; }
+
 
  private:
     std::vector<fs::path> i_files;
-    fs::path i_output = ".";
+    inline static const fs::path i_default_output = ".";
+    fs::path i_output = i_default_output;
     bool i_output_isdir = false; // Cached result
     bool i_fussy = false;
     bool i_verbose = false;
+    bool i_clear = false;
     str::keyvals i_options; // Conversion and writing options
 };
 
@@ -191,7 +201,7 @@ template<typename F> void parse_buffer(F parsefunct, const std::string_view buf,
         issues.push_back( fmt::format("____Parsing of {}",path) );
         issues.insert(issues.end(), parse_issues.begin(), parse_issues.end());
         // Log in a file
-        const std::string log_file_path{ str::replace_extension(path, ".log") };
+        const std::string log_file_path{ str::replace_extension(path, ".log") }; // fs::temp_directory_path()
         sys::file_write log_file_write( log_file_path );
         log_file_write << sys::human_readable_time_stamp() << '\n';
         log_file_write << "[Parse log of "sv << path << "]\n"sv;
@@ -298,6 +308,29 @@ int main( int argc, const char* argv[] )
         if( args.files().empty() )
            {
             throw std::invalid_argument("No files passed");
+           }
+
+        if( args.clear() && args.output_isdir() )
+           {
+            if( args.output_isdefault() )
+               {
+                if( args.verbose() )
+                   {
+                    std::cout << "Won't clear files in default output folder\n";
+                   }
+               }
+            else
+               {
+                const auto removed_count = sys::remove_files_inside(args.output(), std::regex{R"-(^.*\.(?:log|pll|plclib)$)-"});
+                if( args.verbose() )
+                   {
+                    std::cout << "Cleared " << removed_count << " files in " << args.output().string() << '\n';
+                   }
+                if( !fs::is_empty(args.output()) )
+                   {
+                    issues.push_back("Output directory contains uncleared files");
+                   }
+               }
            }
 
         for( const auto& pth : args.files() )

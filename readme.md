@@ -105,13 +105,14 @@ The `.h` files will generate both formats `.pll` and `.plclib`.
 
 Transform all `.h` files in the current directory into a given output directory:
 ```
-$ llconv -fussy *.h -output plc/LogicLab/generated-libs
+$ llconv -fussy -verbose *.h -output plc/LogicLab/generated-libs
 ```
 
 Transform all `.h` files in `prog/` and all `.pll` files in `plc/`,
-sorting output objects by name and indicating `plclib` schema version:
+deleting existing files in the output folder,
+sorting objects by name and indicating the `plclib` schema version:
 ```
-$ llconv -fussy -options sort:by-name,schemaver:2.8 prog/*.h plc/*.pll -output plc/LogicLab/generated-libs
+$ llconv -fussy -options sort:by-name,schemaver:2.8 prog/*.h plc/*.pll -clear -output plc/LogicLab/generated-libs
 ```
 
 

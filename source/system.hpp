@@ -550,7 +550,12 @@ std::vector<fs::path> file_glob(const std::string_view str_pattern)
         //return std::regex_search(pth, std::regex("*?"));
         return pth.rfind('*') != std::string::npos || pth.rfind('?') != std::string::npos;
        };
-    if( contains_wildcards(path_pattern.parent_path().string()) ) throw std::runtime_error("glob: Wildcards in directories not supported (" + path_pattern.string() + ")");
+
+    if( contains_wildcards(path_pattern.parent_path().string()) )
+       {
+        throw std::runtime_error("glob: Wildcards in directories not supported (" + path_pattern.string() + ")");
+       }
+
     //if( path_pattern.is_relative() ) path_pattern = fs::absolute(path_pattern); // Ensure absolute path?
     const fs::path parent_folder = path_pattern.parent_path().empty() ? fs::current_path() : path_pattern.parent_path();
     const std::string file_pattern = path_pattern.filename().string();
@@ -592,59 +597,53 @@ std::vector<fs::path> file_glob(const std::string_view str_pattern)
 }
 
 
-/////////////////////////////////////////////////////////////////////////////
-//sys::path file("c:\\aaa\\bbb\\ccc\\name.ext");
-//std::cout << "  full_path: " << file.full_path()
-//          << "  dir: " << std::string(file.directory())
-//          << "  name: " << std::string(file.filename())
-//          << "  extension: " << std::string(file.extension())
-//          << "  stem: " << std::string(file.stem()) << '\n';
-//class path
+
+//---------------------------------------------------------------------------
+// ex. const auto removed_count = remove_all_inside(fs::temp_directory_path(), std::regex{R"-(^.*\.(tmp)$)-"});
+//std::size_t remove_all_inside(const std::filesystem::path& dir, std::regex&& reg)
 //{
-// public:
-//    explicit path(const std::string& pth) : i_path(pth)
+//    std::size_t removed_items_count { 0 };
+//
+//    if( !fs::is_directory(dir) )
 //       {
-//        i_pathpos = i_path.find_last_of("\\/");
-//        i_extpos = i_path.rfind('.');
+//        throw std::invalid_argument("Not a directory: " + dir.string());
 //       }
 //
-//    const std::string& full_path() const noexcept { return i_path; }
-//
-//    std::string_view directory() const noexcept
+//    for( auto& elem : fs::directory_iterator(dir) )
 //       {
-//        if( i_pathpos == std::string::npos ) return std::string_view(i_path.data(),0);
-//        return std::string_view(i_path.data(), i_pathpos+1);
+//        if( std::regex_match(elem.path().filename().string(), reg) )
+//           {
+//            removed_items_count += fs::remove_all(elem.path());
+//           }
 //       }
 //
-//    std::string_view filename() const noexcept
-//       {
-//        if( i_pathpos == std::string::npos ) return std::string_view(i_path);
-//        return std::string_view(i_path.data()+i_pathpos+1, i_path.length()-(i_pathpos+1));
-//       }
-//
-//    std::string_view extension() const noexcept
-//       {
-//        if( i_extpos == std::string::npos ) return std::string_view(i_path.data(),0);
-//        return std::string_view(i_path.data()+i_extpos, i_path.length()-i_extpos);
-//       }
-//
-//    std::string_view stem() const noexcept
-//       {
-//        if( i_extpos == std::string::npos ) return filename();
-//        else if( i_pathpos == std::string::npos ) return std::string_view(i_path.data(), i_extpos);
-//        return std::string_view(i_path.data()+i_pathpos+1, i_extpos-i_pathpos-1);
-//       }
-//
-//    std::string replace_extension(std::string newext) const noexcept
-//       {
-//        return newext = i_path.substr(0,i_extpos) + newext;
-//       }
-//
-// private:
-//    std::string i_path;
-//    std::string::size_type i_pathpos = std::string::npos;
-//    std::string::size_type i_extpos = std::string::npos;
-//};
+//    return removed_items_count;
+//}
+
+
+
+//---------------------------------------------------------------------------
+// ex. const auto removed_count = remove_files_inside(fs::temp_directory_path(), std::regex{R"-(^.*\.(tmp)$)-"});
+std::size_t remove_files_inside(const std::filesystem::path& dir, std::regex&& reg)
+{
+    std::size_t removed_items_count { 0 };
+
+    if( !fs::is_directory(dir) )
+       {
+        throw std::invalid_argument("Not a directory: " + dir.string());
+       }
+
+    for( auto& elem : fs::directory_iterator(dir) )
+       {
+        if( elem.is_regular_file() && std::regex_match(elem.path().filename().string(), reg) )
+           {
+            removed_items_count += fs::remove(elem.path());
+           }
+       }
+
+    return removed_items_count;
+}
+
 
 
 //---------------------------------------------------------------------------
@@ -676,25 +675,6 @@ std::vector<fs::path> file_glob(const std::string_view str_pattern)
 //    return buf;
 //}
 
-//---------------------------------------------------------------------------
-// Split to lines
-//std::vector<std::string_view> split_lines(const std::string_view buf)
-//{
-//    std::vector<std::string_view> lines;
-//    lines.reserve(buf.size() / 40);
-//    std::size_t i=0, i_start=0;
-//    while( i<buf.size() )
-//       {
-//        if( buf[i] == '\n' )
-//           {
-//            lines.emplace_back(buf.data()+i_start, i-i_start);
-//            i_start = ++i;
-//           }
-//        else ++i;
-//       }
-//    if(i>i_start) lines.emplace_back(buf.data()+i_start, i-i_start);
-//    return lines;
-//}
 
 }//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 

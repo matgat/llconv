@@ -206,11 +206,32 @@ std::string iso_latin1_to_utf8(const std::string_view ansi)
 }
 
 
+//---------------------------------------------------------------------------
+// Split to lines
+//std::vector<std::string_view> split_lines(const std::string_view buf)
+//{
+//    std::vector<std::string_view> lines;
+//    lines.reserve(buf.size() / 40);
+//    std::size_t i=0, i_start=0;
+//    while( i<buf.size() )
+//       {
+//        if( buf[i] == '\n' )
+//           {
+//            lines.emplace_back(buf.data()+i_start, i-i_start);
+//            i_start = ++i;
+//           }
+//        else ++i;
+//       }
+//    if(i>i_start) lines.emplace_back(buf.data()+i_start, i-i_start);
+//    return lines;
+//}
+
+
 /////////////////////////////////////////////////////////////////////////////
 // Natural sorting compare functor
 // std::map<std::string,std::string,NatSortLess> map;
 // std::sort(vector, NatSortLess cmp);
-//class NatSortLess ///////////////////////////////////////////////////////////
+//class NatSortLess
 //{
 // public:
 //    bool operator()(const char* const a, const char* const b) const { return natcmp(a, b) < 0; }
@@ -294,8 +315,6 @@ std::string iso_latin1_to_utf8(const std::string_view ansi)
 //           }
 //       }
 //};
-
-
 
 
 
