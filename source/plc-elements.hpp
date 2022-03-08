@@ -159,7 +159,7 @@ class Variable
     bool is_array() const noexcept { return i_ArrayDim>0; }
     std::size_t array_dim() const noexcept { return i_ArrayDim; }
     std::size_t array_startidx() const noexcept { return i_ArrayFirstIdx; }
-    std::size_t array_lastidx() const noexcept { return i_ArrayFirstIdx + i_ArrayDim - 1u; } 
+    std::size_t array_lastidx() const noexcept { return i_ArrayFirstIdx + i_ArrayDim - 1u; }
     void set_array_range(const std::size_t idx_start, const std::size_t idx_last)
        {
         if( idx_start >= idx_last ) throw std::runtime_error(fmt::format("Invalid array range {}..{} of variable \"{}\"", idx_start, idx_last, name()));
@@ -691,14 +691,14 @@ class Library
     std::string to_str() const noexcept
        {
         std::string s;
-        s.reserve(256);
-        s += "Library " + name();
+        s.reserve(512);
+        s += "Library \"" + name() + "\"";
         if( !global_constants().is_empty() ) s += ", " + std::to_string(global_constants().size()) + " global constants";
-        if( !global_retainvars().is_empty() ) s += ", " + std::to_string(global_retainvars().size()) + " global retain variables";
-        if( !global_variables().is_empty() ) s += ", " + std::to_string(global_variables().size()) + " global variables";
-        if( !programs().empty() ) s += ", " + std::to_string(programs().size()) + " programs";
-        if( !function_blocks().empty() ) s += ", " + std::to_string(function_blocks().size()) + " function blocks";
+        if( !global_retainvars().is_empty() ) s += ", " + std::to_string(global_retainvars().size()) + " global retain vars";
+        if( !global_variables().is_empty() ) s += ", " + std::to_string(global_variables().size()) + " global vars";
         if( !functions().empty() ) s += ", " + std::to_string(functions().size()) + " functions";
+        if( !function_blocks().empty() ) s += ", " + std::to_string(function_blocks().size()) + " function blocks";
+        if( !programs().empty() ) s += ", " + std::to_string(programs().size()) + " programs";
         if( !macros().empty() ) s += ", " + std::to_string(macros().size()) + " macros";
         if( !structs().empty() ) s += ", " + std::to_string(structs().size()) + " structs";
         if( !typedefs().empty() ) s += ", " + std::to_string(typedefs().size()) + " typedefs";
@@ -709,62 +709,114 @@ class Library
        }
 
     //---------------------------------------------------------------------------
-    //void write(const sys::file_write& f) const
-    //{
-    //    f << "\nglobal vars:\n"sv;
-    //    for( const auto& group : global_variables().groups() )
+    //void write_full_summary(const sys::file_write& f, const std::string_view ind) const
+    //   {
+    //    if( !global_constants().is_empty() )
     //       {
-    //        f << "    \""sv << group.name() << "\"\n"sv;
-    //        for( const auto& var : group.variables() )
+    //        f << '\n' << ind << "constants:\n"sv;
+    //        for( const auto& group : global_constants().groups() )
     //           {
-    //            f << "        "sv << var.name() << '\n';
+    //            f << ind << ind << group.name() << '\n';
+    //            for( const auto& var : group.variables() )
+    //               {
+    //                f << ind << ind << ind << var.name() << '\n';
+    //               }
     //           }
     //       }
     //
-    //    f << "\nFunctions:\n"sv;
-    //    for( const auto& pou : functions() )
+    //    if( !global_variables().is_empty() || !global_retainvars().is_empty() )
     //       {
-    //        f << "    "sv << pou.name() << ':'  << pou.return_type() <<  '\n';
-    //       }
-    //
-    //    f << "\nFunction blocks:\n"sv;
-    //    for( const auto& pou : function_blocks() )
-    //       {
-    //        f << "    "sv << pou.name() << '\n';
-    //       }
-    //
-    //    f << "\nPrograms:\n"sv;
-    //    for( const auto& pou : programs() )
-    //       {
-    //        f << "    "sv << pou.name() << '\n';
-    //       }
-    //
-    //    f << "\nmacros:\n"sv;
-    //    for( const auto& macro : macros() )
-    //       {
-    //        f << "    "sv << macro.name() << '\n';
-    //        for( const auto& par : macro.parameters() )
+    //        f << '\n' << ind << "global vars:\n"sv;
+    //        for( const auto& group : global_variables().groups() )
     //           {
-    //            f << "        "sv << par.name() << '\n';
+    //            f << ind << ind << group.name() << '\n';
+    //            for( const auto& var : group.variables() )
+    //               {
+    //                f << ind << ind << ind << var.name() << '\n';
+    //               }
+    //           }
+    //        for( const auto& group : global_retainvars().groups() )
+    //           {
+    //            f << ind << ind << group.name() << '\n';
+    //            for( const auto& var : group.variables() )
+    //               {
+    //                f << ind << ind << ind << var.name() << '\n';
+    //               }
     //           }
     //       }
     //
-    //    f << "\ntypedefs:\n"sv;
-    //    for( const auto& tdef : typedefs() )
+    //    if( !functions().empty() )
     //       {
-    //        f << "    "sv << tdef.name() << '\n';
-    //       }
-    //
-    //    f << "\nenums:\n"sv;
-    //    for( const auto& en : enums() )
-    //       {
-    //        f << "    "sv << en.name() << '\n';
-    //        for( const auto& elem : en.elements() )
+    //        f << '\n' << ind << "functions:\n"sv;
+    //        for( const auto& elem : functions() )
     //           {
-    //            f << "        "sv << elem.name() << '\n';
+    //            f << ind << ind << elem.name() << ':' << pou.return_type() << '\n';
     //           }
     //       }
-    //}
+    //
+    //    if( !function_blocks().empty() )
+    //       {
+    //        f << '\n' << ind << "function blocks:\n"sv;
+    //        for( const auto& elem : function_blocks() )
+    //           {
+    //            f << ind << ind << elem.name() << '\n';
+    //           }
+    //       }
+    //
+    //    if( !programs().empty() )
+    //       {
+    //        f << '\n' << ind << "programs:\n"sv;
+    //        for( const auto& elem : programs() )
+    //           {
+    //            f << ind << ind << elem.name() << '\n';
+    //           }
+    //       }
+    //
+    //    if( !macros().empty() )
+    //       {
+    //        f << '\n' << ind << "macros:\n"sv;
+    //        for( const auto& elem : macros() )
+    //           {
+    //            f << ind << ind << elem.name() << '\n';
+    //           }
+    //       }
+    //
+    //    if( !xxx().empty() )
+    //       {
+    //        f << '\n' << ind << "typedefs:\n"sv;
+    //        for( const auto& elem : typedefs() )
+    //           {
+    //            f << ind << ind << elem.name() << '\n';
+    //           }
+    //       }
+    //
+    //    if( !enums().empty() )
+    //       {
+    //        f << '\n' << ind << "enums:\n"sv;
+    //        for( const auto& elem : enums() )
+    //           {
+    //            f << ind << ind << elem.name() << '\n';
+    //           }
+    //       }
+    //
+    //    if( !subranges().empty() )
+    //       {
+    //        f << '\n' << ind << "subranges:\n"sv;
+    //        for( const auto& elem : subranges() )
+    //           {
+    //            f << ind << ind << elem.name() << '\n';
+    //           }
+    //       }
+    //
+    //    //if( !interfaces().empty() )
+    //    //   {
+    //    //    f << '\n' << ind << "interfaces:\n"sv;
+    //    //    for( const auto& elem : interfaces() )
+    //    //       {
+    //    //        f << ind << ind << elem.name() << '\n';
+    //    //       }
+    //    //   }
+    //   }
 
  private:
     std::string i_Name;

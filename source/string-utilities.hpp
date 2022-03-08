@@ -59,7 +59,7 @@ std::string escape(const char c) noexcept
 
 //---------------------------------------------------------------------------
 // Show string special characters
-std::string& escape(std::string& s) noexcept
+std::string escape(std::string&& s) noexcept
    {
     std::string::size_type i = 0;
     while( i<s.size() )
@@ -83,9 +83,7 @@ std::string& escape(std::string& s) noexcept
 // Show string special characters
 std::string escape(const std::string_view sv) noexcept
    {
-    std::string s(sv);
-    escape(s);
-    return s;
+    return escape( std::string(sv) );
    }
 
 

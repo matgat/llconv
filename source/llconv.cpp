@@ -355,7 +355,7 @@ int main( int argc, const char* argv[] )
             // Show file name and size
             if( args.verbose() )
                {
-                std::cout << "Processing " << str_pth;
+                std::cout << "\nProcessing " << str_pth;
                 std::cout << " (size: ";
                 if(file_buf.size()>1048576) std::cout << file_buf.size()/1048576 << "MB)\n";
                 else if(file_buf.size()>1024) std::cout << file_buf.size()/1024 << "KB)\n";

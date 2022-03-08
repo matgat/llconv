@@ -18,11 +18,14 @@ The supported transformations are:
 
 #### Input files
 Input files must:
-* Be encoded in `ANSI` or `UTF-8`\
-  _Rationale: Other encodings have only disadvantages and must be avoided:
-              much more size (text mostly ASCII),
+* Be syntactically correct
+* Be encoded in `UTF-8`\
+  _Rationale: `8-bit ANSI` encodings introduce a dependency on the codepage,
+              while encodings based on a bigger character size should
+              be avoided because have only disadvantages:
+              much more size (text mostly `ASCII`),
               slower parsing (endianness),
-              less compatibility and comparability_
+              generally less compatible with external tools_
 * Have strictly unix line breaks (`LF`, `\n`)\
   _Rationale: There's really no point for two-chars lines breaks
               unless you're stuck with `notepad.exe` or sending
@@ -46,11 +49,11 @@ Sipro header files supported syntax is:
 #define reg_label register // description
 #define val_label value // [type] description
 ```
-Definitions inlined comments cannot contain XML special characters.
+Inlined comments (defines description) cannot contain XML special characters.
 
 Sipro registers will be recognized and exported:
 ```
-#define vqPos vq100 // Position [mm]
+#define vqPos vq100 // Position
 ```
 
 It's possible to export also numeric constants

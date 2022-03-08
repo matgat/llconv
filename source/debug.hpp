@@ -30,6 +30,7 @@ namespace dbg
   #ifdef MS_WINDOWS
     #ifdef NDEBUG
       #define EVTLOG(...)
+      //#define EVTLOG(s, ...) ::OutputDebugString(fmt::format(s,__VA_ARGS__).c_str());
     #else
       #define EVTLOG(s, ...) ::OutputDebugString(fmt::format(s,__VA_ARGS__).c_str());
     #endif

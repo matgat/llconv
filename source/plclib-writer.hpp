@@ -254,6 +254,22 @@ void write(const sys::file_write& f, const plcb::Library& lib, const str::keyval
       << "\t\t<!-- author=\"llconv plclib::write()\" date=\""sv << sys::human_readable_time_stamp() << "\" -->\n"sv
       << "\t\t<descr>"sv << lib.descr() << "</descr>\n"sv;
 
+    // Content summary
+    f << "\t\t<!--\n"sv;
+    if( !lib.global_variables().is_empty() )  f<< "\t\t\tglobal-variables: "sv << std::to_string(lib.global_variables().size())  << '\n';
+    if( !lib.global_constants().is_empty() )  f<< "\t\t\tglobal-constants: "sv << std::to_string(lib.global_constants().size())  << '\n';
+    if( !lib.global_retainvars().is_empty() ) f<< "\t\t\tglobal-retain-vars: "sv << std::to_string(lib.global_retainvars().size())  << '\n';
+    if( !lib.functions().empty() )            f<< "\t\t\tfunctions: "sv << std::to_string(lib.functions().size())  << '\n';
+    if( !lib.function_blocks().empty() )      f<< "\t\t\tfunction blocks: "sv << std::to_string(lib.function_blocks().size())  << '\n';
+    if( !lib.programs().empty() )             f<< "\t\t\tprograms: "sv << std::to_string(lib.programs().size())  << '\n';
+    if( !lib.macros().empty() )               f<< "\t\t\tmacros: "sv << std::to_string(lib.macros().size())  << '\n';
+    if( !lib.structs().empty() )              f<< "\t\t\tstructs: "sv << std::to_string(lib.structs().size())  << '\n';
+    if( !lib.typedefs().empty() )             f<< "\t\t\ttypedefs: "sv << std::to_string(lib.typedefs().size())  << '\n';
+    if( !lib.enums().empty() )                f<< "\t\t\tenums: "sv << std::to_string(lib.enums().size())  << '\n';
+    if( !lib.subranges().empty() )            f<< "\t\t\tsubranges: "sv << std::to_string(lib.subranges().size())  << '\n';
+    //if( !lib.interfaces().empty() )           f<< "\t\t\tinterfaces: "sv << std::to_string(lib.interfaces().size())  << '\n';
+    f << "\t\t-->\n"sv;
+
     // [Workspace]
     f<< "\t\t<libWorkspace>\n"sv;
     f<< "\t\t\t<folder name=\""sv << lib.name() << "\" id=\""sv << std::to_string(str::hash(lib.name())) << "\">\n"sv;
