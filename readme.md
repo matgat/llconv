@@ -1,5 +1,5 @@
 ## [llconv](https://github.com/matgat/llconv.git)
-This is a conversion utility between these formats:
+This is a conversion tool between these formats:
 * `.h` (Sipro source header)
 * `.pll` (Plc LogicLab3 Library)
 * `.plclib` (LogicLab5 PLC LIBrary)
@@ -13,33 +13,45 @@ The supported transformations are:
 * `.pll` → `.plclib`
 
 
+_________________________________________________________________________
+## Limitations
+This tool aims to be very fast and efficient:
+the raw content of the input is directly written on the output.
+This behavior introduces some limitations on the input files.
+To avoid dynamic allocations, the input is unchanged.
+There are no attempts to fix invalid characters, or to support
+different encodings and line breaks.
 
-### Limitations
+A couple of draconian choices have been made:
 
-#### Input files
-Input files must:
-* Be syntactically correct
-* Be encoded in `UTF-8`\
+* Support just `UTF-8` encoding\
   _Rationale: `8-bit ANSI` encodings introduce a dependency on the codepage,
               while encodings based on a bigger character size should
               be avoided because have only disadvantages:
               much more size (text mostly `ASCII`),
               slower parsing (endianness),
               generally less compatible with external tools_
-* Have strictly unix line breaks (`LF`, `\n`)\
+
+* Support just _unix_ line breaks (`LF`, `\n`)\
   _Rationale: There's really no point for two-chars lines breaks
               unless you're stuck with `notepad.exe` or sending
               the character stream to an ancient typewriter_
 
-#### Syntax
-* _IEC 61131-3_ multidimensional arrays like `ARRAY[1..2, 1..2]` not supported
-* Descriptions (`.h` `#define` comments and `.pll` `{DE: ...}`) cannot contain XML special characters nor line breaks\
-  _Rationale: Parsing is much more faster without dynamic allocations to
-              store a modified input (in this case the escaped characters)_
+### Input files
+Input files must:
+* Be syntactically correct
+* Be encoded in `UTF-8`
+* Have unix line breaks (`\n`)
+* Descriptions (`.h` `#define` inlined comments and `.pll` `{DE: ...}`) cannot contain XML special characters nor line breaks
+
+### _IEC 61131-3_ syntax
+* Parser is case sensitive (uppercase keywords)
+* Multidimensional arrays like `ARRAY[1..2, 1..2]` not supported
+* `Interface` blocks not supported
 
 
-
-### `.h` files
+_________________________________________________________________________
+## `.h` files
 Sipro header files supported syntax is:
 ```
 // line comment
@@ -84,7 +96,8 @@ The recognized types are:
 
 
 
-### `.pll` files
+_________________________________________________________________________
+## `.pll` files
 Some additional library data will be extracted from the
 first comment of the `.pll` file:
 ```
@@ -95,8 +108,8 @@ first comment of the `.pll` file:
 ```
 
 
-
-### Usage
+_________________________________________________________________________
+## Usage
 To print usage info:
 ```
 $ llconv -help
@@ -118,8 +131,8 @@ $ llconv -fussy -options sort:by-name,schemaver:2.8 prog/*.h plc/*.pll -clear -o
 ```
 
 
-
-### Build
+_________________________________________________________________________
+## Build
 ```
 $ git clone https://github.com/matgat/llconv.git
 $ cd llconv

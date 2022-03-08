@@ -32,7 +32,7 @@ namespace h //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 /////////////////////////////////////////////////////////////////////////////
 // Descriptor of a '#define' entry in a buffer
-class DefineRef
+class DefineBuf
 {
  public:
     [[nodiscard]] operator bool() const noexcept { return !i_Value.empty(); }
@@ -104,16 +104,16 @@ class Parser
            {
             notify_error("Empty file");
            }
-
+        // Supporto solo UTF-8
         if( buf[0]=='\xFF' || buf[0]=='\xFE' || buf[0]=='\x00' )
            {
             throw std::runtime_error("Bad encoding, not UTF-8");
            }
        }
 
-    [[nodiscard]] DefineRef next_define()
+    [[nodiscard]] DefineBuf next_define()
        {
-        DefineRef def;
+        DefineBuf def;
 
         try{
             while( i<siz )
@@ -282,7 +282,7 @@ class Parser
        }
 
     //-----------------------------------------------------------------------
-    void collect_define(DefineRef& def)
+    void collect_define(DefineBuf& def)
        {// LABEL       0  // [INT] Descr
         // vnName     vn1782  // descr [unit]
         // Contract: '#define' already eat
@@ -387,7 +387,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
     lib.global_constants().groups().back().set_name("Header_Constants");
 
     Parser parser(buf, issues, fussy);
-    while( const DefineRef def = parser.next_define() )
+    while( const DefineBuf def = parser.next_define() )
        {
         //DBGLOG("Define - label=\"{}\" value=\"{}\" comment=\"{}\" predecl=\"{}\"\n", def.label(), def.value(), str::iso_latin1_to_utf8(def.comment()), def.comment_predecl())
 

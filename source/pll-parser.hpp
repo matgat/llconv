@@ -53,8 +53,11 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             return;
            }
        }
-    // Mi accontento di intercettare UTF-16
-    if( buf[0]=='\xFF' || buf[0]=='\xFE' ) throw std::runtime_error("Bad encoding, not UTF-8");
+    // Supporto solo UTF-8
+    if( buf[0]=='\xFF' || buf[0]=='\xFE' || buf[0]=='\x00' )
+       {
+        throw std::runtime_error("Bad encoding, not UTF-8");
+       }
 
     // Doesn't play well with windows EOL "\r\n", since uses string_view extensively, cannot eat '\r'
     //if(buf.find('\r') != buf.npos) throw std::runtime_error("EOL is not unix, remove CR (\\r) character");
@@ -964,8 +967,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
     try{
         while( i<siz )
            {
-            EVTLOG("main: offset:{} char:{} status:{}", i, buf[i], (int)status)
-
+            //EVTLOG("main: offset:{} char:{} status:{}", i, buf[i], (int)status)
             switch( status )
                {
                 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
