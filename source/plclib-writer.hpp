@@ -341,9 +341,9 @@ void write(const sys::file_write& f, const plcb::Library& lib, const str::keyval
        }
 
     // [Global variables groups]
-    if( lib.global_constants().has_named_group() ||
-        lib.global_retainvars().has_named_group() ||
-        lib.global_variables().has_named_group() )
+    if( lib.global_constants().has_nonempty_named_group() ||
+        lib.global_retainvars().has_nonempty_named_group() ||
+        lib.global_variables().has_nonempty_named_group() )
        {
         f << "\t\t<iecVarsDeclaration>\n"sv;
 

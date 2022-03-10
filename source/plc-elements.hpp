@@ -202,6 +202,8 @@ class Variables_Group
     void set_name(const std::string_view s) noexcept { i_Name = s; }
     bool has_name() const noexcept { return !i_Name.empty(); }
 
+    bool is_empty() const noexcept { return i_Variables.empty(); }
+
     const std::vector<Variable>& variables() const noexcept { return i_Variables; }
     std::vector<Variable>& variables() noexcept { return i_Variables; }
 
@@ -222,7 +224,12 @@ class Variables_Group
 class Variables_Groups
 {
  public:
-    bool is_empty() const noexcept { return groups().empty(); }
+    bool is_empty() const noexcept
+       {
+        //return groups().empty(); // Nah
+        for( const auto& group : groups() ) if(!group.is_empty()) return false;
+        return true;
+       }
 
     std::size_t size() const noexcept
        {
@@ -231,9 +238,9 @@ class Variables_Groups
         return tot_siz;
        }
 
-    bool has_named_group() const noexcept
+    bool has_nonempty_named_group() const noexcept
        {
-        for( const auto& group : groups() ) if(group.has_name()) return true;
+        for( const auto& group : groups() ) if(group.has_name() && !group.is_empty()) return true;
         return false;
        }
 
