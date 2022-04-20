@@ -4,9 +4,10 @@ This is a conversion tool between these formats:
 * `.pll` (Plc LogicLab3 Library)
 * `.plclib` (LogicLab5 PLC LIBrary)
 
-Sipro `.h` files resemble a c-like header with `#define` directives.
-LogicLab library files are text files that contain *IEC 61131-3* ST code,
-the latest format (`.plclib`) is xml based.
+Sipro header files resemble a *c-like* header containing just
+`#define` directives.
+LogicLab libraries are *text* files embedding *IEC 61131-3* ST code;
+the latest format (`.plclib`) embraces a pervasive *xml* structure.
 
 The supported transformations are:
 * `.h` → `.pll`, `.plclib`
@@ -25,17 +26,17 @@ different encodings and line breaks.
 A couple of draconian choices have been made:
 
 * Support just `UTF-8` encoding\
-  _Rationale: `8-bit ANSI` encodings introduce a dependency on the codepage,
-              while encodings based on a bigger character size should
-              be avoided because have only disadvantages:
+  _Rationale: `8-bit ANSI` encodings introduce a dependency on
+              the codepage, while encodings based on a bigger
+              character size have only disadvantages:
               much more size (text mostly `ASCII`),
               slower parsing (endianness),
               generally less compatible with external tools_
 
 * Support just _unix_ line breaks (`LF`, `\n`)\
   _Rationale: There's really no point for two-chars lines breaks
-              unless you're stuck with `notepad.exe` or sending
-              the character stream to an ancient typewriter_
+              even in *Windows*, unless you're stuck with
+              `notepad.exe` or an ancient teletype device_
 
 ### Input files
 Input files must:
@@ -46,8 +47,8 @@ Input files must:
 
 ### _IEC 61131-3_ syntax
 * Parser is case sensitive (uppercase keywords)
-* Multidimensional arrays like `ARRAY[1..2, 1..2]` not supported
-* `Interface` blocks not supported
+* Multidimensional arrays like `ARRAY[1..2, 1..2]` are not supported
+* `Interface` blocks are not supported
 
 
 _________________________________________________________________________
@@ -82,7 +83,7 @@ The recognized types are:
 |   `SINT`    | *Short INTeger*             |  1   | -128 … 127                |
 |   `INT`     | *INTeger*                   |  2   | -32768 … 32767            |
 |   `DINT`    | *Double INTeger*            |  4   |  -2147483648 … 2147483647 |
-| ~~`LINT`~~  | ~~*Long INTeger*~~          |  8   | -2⁶³ … 2⁶³⁻¹              |
+| ~~`LINT`~~  | ~~*Long INTeger*~~          |  8   | -2⁶³ … 2⁶³-1          |
 |   `USINT`   | *Unsigned Short INTeger*    |  1   | 0 … 255                   |
 |   `UINT`    | *Unsigned INTeger*          |  2   | 0 … 65535                 |
 |   `UDINT`   | *Unsigned Double INTeger*   |  4   | 0 … 4294967295            |
@@ -98,12 +99,13 @@ The recognized types are:
 
 _________________________________________________________________________
 ## `.pll` files
-Some additional library data will be extracted from the
-first comment of the `.pll` file:
+Authors are encouraged to include custom additional library data in the first comment of the `.pll` file.
+The recognized fields are:
+
 ```
 (*
-    descr: Machine logic stuff
-    version: 0.5.1
+    descr: Machine logic
+    version: 1.2.31
 *)
 ```
 

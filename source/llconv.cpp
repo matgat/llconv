@@ -27,6 +27,8 @@
 
 using namespace std::literals; // "..."sv
 
+#define PLL_TEST
+
 
 /////////////////////////////////////////////////////////////////////////////
 class Arguments
@@ -280,10 +282,11 @@ void test_pll(const std::string& fbasename, const plcb::Library& lib, const Argu
 {
     // Riscrivo come pll la libreria in ingresso...
     const fs::path gen_pll_1_pth = write_pll(lib, fmt::format("{}-1", fbasename), args);
+    const std::string gen_pll_1_pth_str{ gen_pll_1_pth.string() };
     // ...Lo rileggo generando una nuova libreria...
-    const sys::MemoryMappedFile buf2(gen_pll_1_pth.string());
+    const sys::MemoryMappedFile buf2(gen_pll_1_pth_str);
     plcb::Library lib2( gen_pll_1_pth.stem().string() );
-    parse_buffer(pll::parse, buf2.as_string_view(), gen_pll_1_pth.string(), lib2, args, issues);
+    parse_buffer(pll::parse, buf2.as_string_view(), gen_pll_1_pth, gen_pll_1_pth_str, lib2, args, issues);
     //if(lib2!=lib) ...
     // ...E lo riscrivo
     const fs::path gen_pll_2_pth = write_pll(lib2, fmt::format("{}-2", fbasename), args);
