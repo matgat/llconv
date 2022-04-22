@@ -20,7 +20,7 @@ namespace str //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 /////////////////////////////////////////////////////////////////////////////
 // A map of string pairs
-class keyvals
+class keyvals final
 {
  public:
     using string_type = std::string;

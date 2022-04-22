@@ -290,7 +290,7 @@ void edit_text_file(const std::string& pth, const std::size_t offset) noexcept
 
 
 /////////////////////////////////////////////////////////////////////////////
-class MemoryMappedFile
+class MemoryMappedFile final
 {
  public:
     explicit MemoryMappedFile( const std::string& pth )
@@ -391,7 +391,7 @@ class MemoryMappedFile
 
 /////////////////////////////////////////////////////////////////////////////
 // (Over)Write a file
-class file_write
+class file_write final
 {
  public:
     explicit file_write(const std::string& pth)

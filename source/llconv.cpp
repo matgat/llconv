@@ -31,7 +31,7 @@ using namespace std::literals; // "..."sv
 
 
 /////////////////////////////////////////////////////////////////////////////
-class Arguments
+class Arguments final
 {
  public:
     Arguments(int argc, const char* argv[])

@@ -62,7 +62,7 @@ constexpr bool is_num_type(const std::string_view s)
 //                      M     B        700  .  320
 //                      ↑     ↑        ↑       ↑
 //                      type  typevar  index   subindex
-class VariableAddress
+class VariableAddress final
 {
  public:
      VariableAddress(const char typ ='\0', const char vtyp ='\0', const std::uint16_t idx =0, const std::uint16_t sub =0) noexcept
@@ -109,7 +109,7 @@ namespace buf //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 /////////////////////////////////////////////////////////////////////////////
 // A specific vendor directive
-class Directive
+class Directive final
 {
  public:
     std::string_view key() const noexcept { return i_Key; }
@@ -131,7 +131,7 @@ class Directive
 
 /////////////////////////////////////////////////////////////////////////////
 // A variable declaration
-class Variable
+class Variable final
 {
  public:
     std::string_view name() const noexcept { return i_Name; }
@@ -195,7 +195,7 @@ class Variable
 
 /////////////////////////////////////////////////////////////////////////////
 // A named group of variables
-class Variables_Group
+class Variables_Group final
 {
  public:
     std::string_view name() const noexcept { return i_Name; }
@@ -221,7 +221,7 @@ class Variables_Group
 
 /////////////////////////////////////////////////////////////////////////////
 // A series of groups of variables
-class Variables_Groups
+class Variables_Groups final
 {
  public:
     bool is_empty() const noexcept
@@ -260,7 +260,7 @@ class Variables_Groups
 
 /////////////////////////////////////////////////////////////////////////////
 // A struct
-class Struct
+class Struct final
 {
  public:
     std::string_view name() const noexcept { return i_Name; }
@@ -287,7 +287,7 @@ class Struct
 
 /////////////////////////////////////////////////////////////////////////////
 // A type declaration
-class TypeDef
+class TypeDef final
 {
  public:
     explicit TypeDef(const Variable& var) : i_Name(var.name()),
@@ -341,11 +341,11 @@ class TypeDef
 
 /////////////////////////////////////////////////////////////////////////////
 // Enumeration definition
-class Enum
+class Enum final
 {
  public:
     /////////////////////////////////////////////////////////////////////////
-    class Element
+    class Element final
        {
         public:
             std::string_view name() const noexcept { return i_Name; }
@@ -395,7 +395,7 @@ class Enum
 
 /////////////////////////////////////////////////////////////////////////////
 // A subrange declaration
-class Subrange
+class Subrange final
 {
  public:
     std::string_view name() const noexcept { return i_Name; }
@@ -437,7 +437,7 @@ class Subrange
 
 /////////////////////////////////////////////////////////////////////////////
 // Generic Program Organization Unit (program, function_block, function)
-class Pou
+class Pou final
 {
  public:
     std::string_view name() const noexcept { return i_Name; }
@@ -510,11 +510,11 @@ class Pou
 
 /////////////////////////////////////////////////////////////////////////////
 // A macro expansion
-class Macro
+class Macro final
 {
  public:
     /////////////////////////////////////////////////////////////////////////
-    class Parameter
+    class Parameter final
        {
         public:
             std::string_view name() const noexcept { return i_Name; }
@@ -565,7 +565,7 @@ class Macro
 
 /////////////////////////////////////////////////////////////////////////////
 // The whole PLC library data aggregate
-class Library
+class Library final
 {
  public:
     explicit Library(const std::string& nam) noexcept

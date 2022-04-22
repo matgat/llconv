@@ -30,7 +30,7 @@ namespace sipro
 {
 
 /////////////////////////////////////////////////////////////////////////////
-class Register
+class Register final
 {
  private:
     enum en_regtype : uint8_t

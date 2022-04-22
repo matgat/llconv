@@ -16,10 +16,8 @@
 #include <stdexcept> // std::exception, std::runtime_error, ...
 #include <fmt/core.h> // fmt::format
 
-#include "string-utilities.hpp" // str::escape
+#include "basic-parser.hpp" // BasicParser
 #include "plc-elements.hpp" // plcb::*
-#include "format_string.hpp" // fmtstr::parse_error, fmtstr::error
-#include "debug.hpp" // DBGLOG
 
 using namespace std::literals; // "..."sv
 
@@ -29,122 +27,71 @@ namespace pll //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 {
 
 
-//---------------------------------------------------------------------------
-// Parse pll file
-void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::string>& issues, const bool fussy)
+/////////////////////////////////////////////////////////////////////////////
+class Parser final : public BasicParser
 {
-    // Check possible BOM    |  Encoding    |   Bytes     | Chars |
-    //                       |--------------|-------------|-------|
-    //                       | UTF-8        | EF BB BF    | ï»¿   |
-    //                       | UTF-16 (BE)  | FE FF       | þÿ    |
-    //                       | UTF-16 (LE)  | FF FE       | ÿþ    |
-    //                       | UTF-32 (BE)  | 00 00 FE FF | ..þÿ  |
-    //                       | UTF-32 (LE)  | FF FE 00 00 | ÿþ..  |
-    const std::size_t siz = buf.size();
-    if( siz < 2 )
-       {
-        if(fussy)
-           {
-            throw std::runtime_error("Empty file");
-           }
-        else
-           {
-            issues.emplace_back("Empty file");
-            return;
-           }
-       }
-    // Supporto solo UTF-8
-    if( buf[0]=='\xFF' || buf[0]=='\xFE' || buf[0]=='\x00' )
-       {
-        throw std::runtime_error("Bad encoding, not UTF-8");
-       }
+ public:
+    Parser(const std::string_view b, std::vector<std::string>& sl, const bool f)
+      : BasicParser(b,sl,f) {}
 
-    // Doesn't play well with windows EOL "\r\n", since uses string_view extensively, cannot eat '\r'
-    //if(buf.find('\r') != buf.npos) throw std::runtime_error("EOL is not unix, remove CR (\\r) character");
-
-    std::size_t line = 1; // Current line number
-    std::size_t i = 0; // Current character index
-
-    //---------------------------------
-    //auto notify_error = [&](const std::string_view msg, auto... args)
+    //[[nodiscard]] DefineBuf next_define()
     //   {
-    //    if(fussy) throw std::runtime_error( fmt::format(fmt::runtime(msg), args...) );
-    //    else issues.push_back( fmt::format("{} (line {}, offset {})", fmt::format(fmt::runtime(msg), args...), line, i) );
-    //   };
-    // Ehmm, with a lambda I cannot use consteval format
-    #define notify_error(...) \
-       {\
-        if(fussy) throw std::runtime_error( fmt::format(__VA_ARGS__) );\
-        else issues.push_back( fmt::format("{} (line {}, offset {})"sv, fmt::format(__VA_ARGS__), line, i) );\
-       }
+    //    DefineBuf def;
+    //
+    //    try{
+    //        while( i<siz )
+    //           {
+    //            skip_blanks();
+    //            if( eat_line_comment_start() )
+    //               {
+    //                skip_line();
+    //               }
+    //            else if( eat_block_comment_start() )
+    //               {
+    //                skip_block_comment();
+    //               }
+    //            else if( eat_line_end() )
+    //               {// An empty line
+    //               }
+    //            else if( eat_token("#define"sv) )
+    //               {
+    //                collect_define(def);
+    //                break;
+    //               }
+    //            else notify_error("Unexpected content: {}", str::escape(skip_line()));
+    //           }
+    //       }
+    //    catch(std::exception& e)
+    //       {
+    //        throw fmtstr::parse_error(e.what(), line, i);
+    //       }
+    //
+    //    return def;
+    //   }
 
-    //---------------------------------
-    auto is_blank = [](const char c) noexcept -> bool
+ private:
+
+    //-----------------------------------------------------------------------
+    [[nodiscard]] bool eat_block_comment_start() noexcept
        {
-        return std::isspace(c) && c!='\n';
-       };
-
-    //---------------------------------
-    auto skip_blanks = [&]() noexcept -> void
-       {
-        while( i<siz && is_blank(buf[i]) ) ++i;
-       };
-
-    //---------------------------------
-    auto last_not_blank = [&](std::size_t i_last) noexcept -> std::size_t
-       {
-        while( i_last>0 && is_blank(buf[i_last-1]) ) --i_last;
-        return i_last;
-       };
-
-
-    //---------------------------------
-    auto eat_line_end = [&]() noexcept -> bool
-       {
-        EVTLOG("eat_line_end: offset:{}", i)
-        if( i<siz && buf[i]=='\n' )
+        if( i<(siz-1) && buf[i]=='(' && buf[i+1]=='*' )
            {
-            ++i;
-            ++line;
-            EVTLOG("eat_line_end: true")
+            i += 2; // Skip "(*"
             return true;
            }
         return false;
-       };
+       }
 
-    //---------------------------------
-    auto skip_line = [&]() noexcept -> std::string_view
-       {
-        if(i>=siz) return std::string_view(buf.data()+siz-1u, 0);
-        const std::size_t i_start = i;
-        //while( i<siz && !eat_line_end() )
-        //   {
-        //    ++i;
-        //    EVTLOG("skip_line: offset:{}", i)
-        //   }
 
-        while( i<siz && buf[i]!='\n' ) ++i;
-        if( buf[i]=='\n' )
-           {
-            ++i;
-            ++line;
-           }
-
-        EVTLOG("skip_line: offset:{} returning start:{} len:{}", i, i_start, i-i_start )
-        return std::string_view(buf.data()+i_start, i-i_start);
-       };
-
-    //---------------------------------
-    auto skip_comment = [&]() -> void
+    //-----------------------------------------------------------------------
+    void skip_block_comment()
        {
         const std::size_t line_start = line; // Store current line
-        const std::size_t i_start = i;       //               position
-        const std::size_t sizm1 = siz-1;
-        while( i<sizm1 )
+        const std::size_t i_start = i; // Store current position
+        while( i<i_last )
            {
             if( buf[i]=='*' && buf[i+1]==')' )
                {
-                //DBGLOG("    [*] Comment skipped at line {}\n", line)
                 i += 2; // Skip "*)"
                 return;
                }
@@ -154,341 +101,29 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                }
             ++i;
            }
-        throw fmtstr::parse_error("Unclosed comment", line_start, i_start);
-       };
-
-    //---------------------------------
-    auto eat_comment_start = [&]() noexcept -> bool
-       {
-        if( i<(siz-1) && buf[i]=='(' && buf[i+1]=='*' )
-           {
-            i += 2; // Skip "(*"
-            return true;
-           }
-        return false;
-       };
-
-    //---------------------------------
-    auto eat_string = [&](const std::string_view s) noexcept -> bool
-       {
-        const std::size_t i_end = i+s.length();
-        if( i_end<=siz && s==std::string_view(buf.data()+i,s.length()) )
-           {
-            i = i_end;
-            return true;
-           }
-        return false;
-       };
-
-    //---------------------------------
-    auto eat_token = [&](const std::string_view s) noexcept -> bool
-       {
-        const std::size_t i_end = i+s.length();
-        if( ((i_end<siz && !std::isalnum(buf[i_end])) || i_end==siz) && s==std::string_view(buf.data()+i,s.length()) )
-           {
-            i = i_end;
-            return true;
-           }
-        return false;
-       };
-
-    //---------------------------------
-    //auto collect_token = [&]() noexcept -> std::string_view
-    //   {
-    //    const std::size_t i_start = i;
-    //    while( i<siz && !std::isspace(buf[i]) ) ++i;
-    //    return std::string_view(buf.data()+i_start, i-i_start);
-    //   };
-
-    //---------------------------------
-    auto collect_identifier = [&]() noexcept -> std::string_view
-       {
-        const std::size_t i_start = i;
-        while( i<siz && (std::isalnum(buf[i]) || buf[i]=='_') ) ++i;
-        return std::string_view(buf.data()+i_start, i-i_start);
-       };
-
-    //---------------------------------
-    auto collect_numeric_value = [&]() noexcept -> std::string_view
-       {
-        const std::size_t i_start = i;
-        while( i<siz && (std::isdigit(buf[i]) || buf[i]=='+' || buf[i]=='-' || buf[i]=='.' || buf[i]=='E') ) ++i;
-        return std::string_view(buf.data()+i_start, i-i_start);
-       };
-
-    //---------------------------------
-    auto collect_digits = [&]() noexcept -> std::string_view
-       {
-        const std::size_t i_start = i;
-        while( i<siz && std::isdigit(buf[i]) ) ++i;
-        return std::string_view(buf.data()+i_start, i-i_start);
-       };
-
-    //---------------------------------
-    // Read a (base10) positive integer literal
-    auto extract_index = [&]() -> std::size_t
-       {
-        if( i>=siz )
-           {
-            throw fmtstr::error("Index not found");
-           }
-
-        if( buf[i]=='+' )
-           {
-            ++i;
-            if( i>=siz )
-               {
-                throw fmtstr::error("Invalid index \'+\'");
-               }
-           }
-        else if( buf[i]=='-' )
-           {
-            throw fmtstr::error("Negative index");
-           }
-        if( !std::isdigit(buf[i]) )
-           {
-            throw fmtstr::error("Invalid char \'{}\' in index", buf[i]);
-           }
-        std::size_t result = (buf[i]-'0');
-        const std::size_t base = 10u;
-        while( ++i<siz && std::isdigit(buf[i]) )
-           {
-            result = (base*result) + (buf[i]-'0');
-           }
-        return result;
-       };
-
-    //---------------------------------
-    // Read a (base10) integer literal
-    auto extract_integer = [&]() -> int
-       {
-        if( i>=siz )
-           {
-            throw fmtstr::error("No integer found");
-           }
-        int sign = 1;
-        if( buf[i]=='+' )
-           {
-            //sign = 1;
-            ++i;
-            if( i>=siz )
-               {
-                throw fmtstr::error("Invalid integer \'+\'");
-               }
-           }
-        else if( buf[i]=='-' )
-           {
-            sign = -1;
-            ++i;
-            if( i>=siz )
-               {
-                throw fmtstr::error("Invalid integer \'-\'");
-               }
-           }
-        if( !std::isdigit(buf[i]) )
-           {
-            throw fmtstr::error("Invalid char \'{}\' in integer", buf[i]);
-           }
-        int result = (buf[i]-'0');
-        const int base = 10;
-        while( ++i<siz && std::isdigit(buf[i]) )
-           {
-            result = (base*result) + (buf[i]-'0');
-           }
-        return sign * result;
-       };
-
-    //---------------------------------
-    // Read a (base10) floating point number literal
-    //auto extract_double = [&]() -> double
-    //   {
-    //    // [sign]
-    //    int sgn = 1;
-    //    if( buf[i]=='-' ) {sgn = -1; ++i;}
-    //    else if( buf[i]=='+' ) ++i;
-    //
-    //    // [mantissa - integer part]
-    //    double mantissa = 0;
-    //    bool found_mantissa = false;
-    //    if( std::isdigit(buf[i]) )
-    //       {
-    //        found_mantissa = true;
-    //        do {
-    //            mantissa = (10.0 * mantissa) + static_cast<double>(buf[i] - '0');
-    //            //if( buf[++i] == '\'' ); // Skip thousand separator char
-    //           }
-    //        while( std::isdigit(buf[i]) );
-    //       }
-    //    // [mantissa - fractional part]
-    //    if( buf[i] == '.' )
-    //       {
-    //        ++i;
-    //        double k = 0.1; // shift of decimal part
-    //        if( std::isdigit(buf[i]) )
-    //           {
-    //            found_mantissa = true;
-    //            do {
-    //                mantissa += k * static_cast<double>(buf[i] - '0');
-    //                k *= 0.1;
-    //                ++i;
-    //               }
-    //            while( std::isdigit(buf[i]) );
-    //           }
-    //       }
-    //
-    //    // [exponent]
-    //    int exp=0, exp_sgn=1;
-    //    bool found_expchar = false,
-    //         found_expval = false;
-    //    if( buf[i] == 'E' || buf[i] == 'e' )
-    //       {
-    //        found_expchar = true;
-    //        ++i;
-    //        // [exponent sign]
-    //        if( buf[i] == '-' ) {exp_sgn = -1; ++i;}
-    //        else if( buf[i] == '+' ) ++i;
-    //        // [exponent value]
-    //        if( std::isdigit(buf[i]) )
-    //           {
-    //            found_expval = true;
-    //            do {
-    //                exp = (10 * exp) + static_cast<int>(buf[i] - '0');
-    //                ++i;
-    //               }
-    //            while( std::isdigit(buf[i]) );
-    //           }
-    //       }
-    //    if( found_expchar && !found_expval )
-    //         {
-    //          throw fmtstr::error("Invalid floating point number: No exponent value"); // ex "123E"
-    //         }
-    //
-    //    // [calculate result]
-    //    double result = 0.0;
-    //    if( found_mantissa )
-    //      {
-    //       result = sgn * mantissa * std::pow(10.0, exp_sgn*exp);
-    //      }
-    //    else if( found_expval )
-    //       {
-    //        result = sgn * std::pow(10.0,exp_sgn*exp); // ex "E100"
-    //       }
-    //    else
-    //       {
-    //        throw fmtstr::error("Invalid floating point number");
-    //        //if(found_expchar) result = 1.0; // things like 'E,+E,-exp,exp+,E-,...'
-    //        //else result = std::numeric_limits<double>::quiet_NaN(); // things like '+,-,,...'
-    //       }
-    //    return result;
-    //   };
-
-    //---------------------------------
-    //auto collect_until_char_same_line = [&](const char c) -> std::string_view
-    //   {
-    //    const std::size_t i_start = i;
-    //    while( i<siz )
-    //       {
-    //        if( buf[i]==c )
-    //           {
-    //            //DBGLOG("    [*] Collected \"{}\" at line {}\n", std::string_view(buf.data()+i_start, i-i_start), line)
-    //            return std::string_view(buf.data()+i_start, i-i_start);
-    //           }
-    //        else if( buf[i]=='\n' ) break;
-    //        ++i;
-    //       }
-    //    throw fmtstr::error("Unclosed content (\'{}\' expected)", str::escape(c));
-    //   };
-
-    //---------------------------------
-    //auto collect_until_char = [&](const char c) -> std::string_view
-    //   {
-    //    const std::size_t i_start = i;
-    //    while( i<siz )
-    //       {
-    //        if( buf[i]==c )
-    //           {
-    //            //DBGLOG("    [*] Collected \"{}\" at line {}\n", std::string_view(buf.data()+i_start, i-i_start), line)
-    //            return std::string_view(buf.data()+i_start, i-i_start);
-    //           }
-    //        else if( buf[i]=='\n' ) ++line;
-    //        ++i;
-    //       }
-    //    throw fmtstr::error("Unclosed content (\'{}\' expected)", str::escape(c));
-    //   };
+        throw fmtstr::parse_error("Unclosed block comment", line_start, i_start);
+       }
 
 
-    //---------------------------------
-    auto collect_until_char_trimmed = [&](const char c) -> std::string_view
-       {
-        const std::size_t line_start = line; // Store current line
-        const std::size_t i_start = i;       //               position
-        while( i<siz )
-           {
-            if( buf[i]==c )
-               {
-                const std::size_t i_end = last_not_blank(i);
-                return std::string_view(buf.data()+i_start, i_end-i_start);
-               }
-            else if( buf[i]=='\n' ) ++line;
-            ++i;
-           }
-        throw fmtstr::parse_error(fmt::format("Unclosed content (\'{}\' expected)", str::escape(c)), line_start, i_start);
-       };
-
-    //---------------------------------
-    //auto collect_until_token = [&](const std::string_view tok) -> std::string_view
-    //   {
-    //    const std::size_t i_start = i;
-    //    const std::size_t max_siz = siz-tok.length();
-    //    while( i<max_siz )
-    //       {
-    //        if( buf[i]==tok[0] && eat_token(tok) )
-    //           {
-    //            return std::string_view(buf.data()+i_start, i-i_start-tok.length());
-    //           }
-    //        else if( buf[i]=='\n' ) ++line;
-    //        ++i;
-    //       }
-    //    throw fmtstr::parse_error(fmt::format("Unclosed content (\"{}\" expected)",tok), line_start, i_start);
-    //   };
-
-    //---------------------------------
-    auto collect_until_newline_token = [&](const std::string_view tok) -> std::string_view
-       {
-        const std::size_t line_start = line;
-        const std::size_t i_start = i;
-        while( i<siz )
-           {
-            if( buf[i]=='\n' )
-               {
-                ++i;
-                ++line;
-                skip_blanks();
-                if( eat_token(tok) )
-                   {
-                    return std::string_view(buf.data()+i_start, i-i_start-tok.length());
-                   }
-               }
-            else ++i;
-           }
-        throw fmtstr::parse_error(fmt::format("Unclosed content (\"{}\" expected)",tok), line_start, i_start);
-       };
-
-    //---------------------------------
-    auto is_directive = [&]() noexcept -> bool
-       {//{ DE:"some string" }, { CODE:ST }, ...
+    //-----------------------------------------------------------------------
+    [[nodiscard]] bool eat_directive_start() noexcept
+       {// { DE:"some string" }
         if( i<siz && buf[i]=='{' )
            {
             ++i;
             return true;
            }
         return false;
-       };
+       }
 
-    //---------------------------------
-    auto collect_directive = [&]() -> plcb::Directive
-       {//{ DE:"some string" }, { CODE:ST }, ...
+
+    //-----------------------------------------------------------------------
+    [[nodiscard]] plcb::Directive collect_directive()
+       {// { DE:"some string" }
+        // { CODE:ST }
+
         // Contract: already checked if( i>=siz || buf[i]!='{' ) { return; }
+
         //++i; // Skip '{'
         skip_blanks();
         plcb::Directive dir;
@@ -522,7 +157,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                    }
                 ++i;
                }
-            dir.set_value( std::string_view(buf.data()+i_start, i-i_start) );
+            dir.set_value( std::string_view(buf+i_start, i-i_start) );
             ++i; // Skip the second '\"'
            }
         else
@@ -537,10 +172,11 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         ++i; // Skip '}'
         //DBGLOG("    [*] Collected directive \"{}\" at line {}\n", dir.key(), line)
         return dir;
-       };
+       }
 
-    //---------------------------------
-    auto collect_parameter = [&]() -> plcb::Macro::Parameter
+
+    //-----------------------------------------------------------------------
+    [[nodiscard]] plcb::Macro::Parameter collect_macro_parameter()
        {//   WHAT; {DE:"Parameter description"}
         plcb::Macro::Parameter par;
         skip_blanks();
@@ -552,7 +188,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
            }
         ++i; // Skip ';'
         skip_blanks();
-        if( is_directive() )
+        if( eat_directive_start() )
            {
             const plcb::Directive dir = collect_directive();
             if( dir.key() == "DE"sv ) par.set_descr( dir.value() );
@@ -565,10 +201,58 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             notify_error("Unexpected content after macro parameter: {}", str::escape(skip_line()));
            }
         return par;
-       };
+       }
 
-    //---------------------------------
-    auto collect_rest_of_variable = [&](plcb::Variable& var) -> void
+
+    //-----------------------------------------------------------------------
+    [[nodiscard]] plcb::Variable collect_variable()
+       {//  VarName : Type := Val; { DE:"descr" }
+        //  VarName AT %MB300.6000 : ARRAY[ 0..999 ] OF BOOL; { DE:"descr" }
+        //  VarName AT %MB700.0 : STRING[ 80 ]; {DE:"descr"}
+        plcb::Variable var;
+
+        // [Name]
+        skip_blanks();
+        var.set_name( collect_identifier() );
+        skip_blanks();
+        if( i<siz && buf[i]==',' ) throw fmtstr::error("Multiple names not supported in declaration of variable \"{}\"", var.name());
+
+        // [Location address]
+        if( eat_token("AT"sv) )
+           {// Specified a location address %<type><typevar><index>.<subindex>
+            skip_blanks();
+            if( i>=siz || buf[i]!='%' )
+               {
+                throw fmtstr::error("Expected \'%\' in variable \"{}\" address", var.name());
+               }
+            ++i; // Skip '%'
+            // Here expecting something like: MB300.6000
+            var.address().set_type( buf[i] ); i+=1; // In the Sipro/LogicLab world the address type is always 'M'
+            var.address().set_typevar( buf[i] ); i+=1;
+            var.address().set_index( collect_digits() );
+            if( i>=siz || buf[i]!='.' )
+               {
+                throw fmtstr::error("Expected \'.\' in variable \"{}\" address", var.name());
+               }
+            ++i; // Skip '.'
+            var.address().set_subindex( collect_digits() );
+            skip_blanks();
+           }
+
+        // [Name/Type separator]
+        if( i>=siz || buf[i]!=':' )
+           {
+            throw fmtstr::error("Expected \':\' before variable \"{}\" type", var.name());
+           }
+        ++i; // Skip ':'
+
+        collect_rest_of_variable(var);
+        return var;
+       }
+
+
+    //-----------------------------------------------------------------------
+    void collect_rest_of_variable(plcb::Variable& var)
        {// ... STRING[ 80 ]; { DE:"descr" }
         // ... ARRAY[ 0..999 ] OF BOOL; { DE:"descr" }
         // ... ARRAY[1..2, 1..2] OF DINT := [1, 2, 3, 4]; { DE:"multidimensional array" }
@@ -586,7 +270,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             skip_blanks();
             const std::size_t idx_start = extract_index();
             skip_blanks();
-            if( !eat_string(".."sv) )
+            if( !eat(".."sv) )
                {
                 throw fmtstr::error("Expected \"..\" in array index of variable \"{}\"", var.name());
                }
@@ -652,25 +336,29 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
 
             //var.set_value( collect_numeric_value() );
             const std::size_t i_start = i;
+            std::size_t i_last_not_blank = i_start;
             while( i<siz )
                {
                 if( buf[i]==';' )
                    {
-                    const std::size_t i_end = last_not_blank(i);
-                    var.set_value( std::string_view(buf.data()+i_start, i_end-i_start) );
+                    var.set_value( std::string_view(buf+i_start, i_last_not_blank-i_start) );
                     //DBGLOG("    [*] Collected var value \"{}\"\n", var.name())
                     ++i; // Skip ';'
                     break;
                    }
                 else if( buf[i]=='\n' )
                    {
-                    throw fmtstr::error("Unclosed variable \"{}\" value {} (\';\' expected)", var.name(), std::string_view(buf.data()+i_start, i-i_start));
+                    throw fmtstr::error("Unclosed variable \"{}\" value {} (\';\' expected)", var.name(), std::string_view(buf+i_start, i-i_start));
                    }
                 else if( buf[i]==':' || buf[i]=='=' || buf[i]=='<' || buf[i]=='>' || buf[i]=='\"' )
                    {
-                    throw fmtstr::error("Invalid character \'{}\' in variable \"{}\" value {}", buf[i], var.name(), std::string_view(buf.data()+i_start, i-i_start));
+                    throw fmtstr::error("Invalid character \'{}\' in variable \"{}\" value {}", buf[i], var.name(), std::string_view(buf+i_start, i-i_start));
                    }
-                ++i;
+                else
+                   {// Collecting value
+                    if( !is_blank(buf[i]) ) i_last_not_blank = i;
+                    ++i;
+                   }
                }
            }
         else if( buf[i] == ';' )
@@ -680,11 +368,17 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
 
         // [Description]
         skip_blanks();
-        if( is_directive() )
+        if( eat_directive_start() )
            {
             const plcb::Directive dir = collect_directive();
-            if( dir.key() == "DE"sv ) var.set_descr( dir.value() );
-            else notify_error("Unexpected directive \"{}\" in variable \"{}\" declaration", dir.key(), var.name());
+            if( dir.key() == "DE"sv )
+               {
+                var.set_descr( dir.value() );
+               }
+            else
+               {
+                notify_error("Unexpected directive \"{}\" in variable \"{}\" declaration", dir.key(), var.name());
+               }
            }
 
         // Expecting a line end now
@@ -694,56 +388,11 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             notify_error("Unexpected content after variable \"{}\" declaration: {}", var.name(), str::escape(skip_line()));
            }
         //DBGLOG("    [*] Collected var: name=\"{}\" type=\"{}\" val=\"{}\" descr=\"{}\"\n", var.name(), var.type(), var.value(), var.descr())
-       };
+       }
 
-    //---------------------------------
-    auto collect_variable = [&]() -> plcb::Variable
-       {//  VarName : Type := Val; { DE:"descr" }
-        //  VarName AT %MB300.6000 : ARRAY[ 0..999 ] OF BOOL; { DE:"descr" }
-        //  VarName AT %MB700.0 : STRING[ 80 ]; {DE:"descr"}
-        plcb::Variable var;
 
-        // [Name]
-        skip_blanks();
-        var.set_name( collect_identifier() );
-        skip_blanks();
-        if( i<siz && buf[i]==',' ) throw fmtstr::error("Multiple names not supported in declaration of variable \"{}\"", var.name());
-
-        // [Location address]
-        if( eat_token("AT"sv) )
-           {// Specified a location address %<type><typevar><index>.<subindex>
-            skip_blanks();
-            if( i>=siz || buf[i]!='%' )
-               {
-                throw fmtstr::error("Expected \'%\' in variable \"{}\" address", var.name());
-               }
-            ++i; // Skip '%'
-            // Here expecting something like: MB300.6000
-            var.address().set_type( buf[i] ); i+=1; // In the Sipro/LogicLab world the address type is always 'M'
-            var.address().set_typevar( buf[i] ); i+=1;
-            var.address().set_index( collect_digits() );
-            if( i>=siz || buf[i]!='.' )
-               {
-                throw fmtstr::error("Expected \'.\' in variable \"{}\" address", var.name());
-               }
-            ++i; // Skip '.'
-            var.address().set_subindex( collect_digits() );
-            skip_blanks();
-           }
-
-        // [Name/Type separator]
-        if( i>=siz || buf[i]!=':' )
-           {
-            throw fmtstr::error("Expected \':\' before variable \"{}\" type", var.name());
-           }
-        ++i; // Skip ':'
-
-        collect_rest_of_variable(var);
-        return var;
-       };
-
-    //---------------------------------
-    auto collect_rest_of_struct = [&](plcb::Struct& strct) -> void
+    //-----------------------------------------------------------------------
+    void collect_rest_of_struct(plcb::Struct& strct)
        {// <name> : STRUCT { DE:"struct descr" }
         //    x : DINT; { DE:"member descr" }
         //    y : DINT; { DE:"member descr" }
@@ -751,7 +400,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         // Name already collected, "STRUCT" already skipped
         // Possible description
         skip_blanks();
-        if( is_directive() )
+        if( eat_directive_start() )
            {
             const plcb::Directive dir = collect_directive();
             if( dir.key() == "DE"sv ) strct.set_descr( dir.value() );
@@ -761,7 +410,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         while( i<siz )
            {
             do{ skip_blanks(); } while( eat_line_end() ); // Skip empty lines
-            if( eat_string("END_STRUCT;"sv) )
+            if( eat("END_STRUCT;"sv) )
                {
                 break;
                }
@@ -769,9 +418,9 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
                {// Nella lista membri ammetto righe vuote
                 continue;
                }
-            else if( eat_comment_start() )
+            else if( eat_block_comment_start() )
                {// Nella lista membri ammetto righe di commento
-                skip_comment();
+                skip_block_comment();
                 continue;
                }
 
@@ -794,10 +443,11 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             notify_error("Unexpected content after struct \"{}\": {}", strct.name(), str::escape(skip_line()));
            }
         //DBGLOG("    [*] Collected struct \"{}\", {} members\n", strct.name(), strct.members().size())
-       };
+       }
 
-    //---------------------------------
-    auto collect_enum_element = [&](plcb::Enum::Element& elem) -> bool
+
+    //-----------------------------------------------------------------------
+    [[nodiscard]] bool collect_enum_element(plcb::Enum::Element& elem)
        {// VAL1 := 0, { DE:"elem descr" }
         // [Name]
         do{ skip_blanks(); } while( eat_line_end() ); // Skip empty lines
@@ -805,7 +455,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
 
         // [Value]
         skip_blanks();
-        if( !eat_string(":="sv) )
+        if( !eat(":="sv) )
            {
             throw fmtstr::error("Value not found in enum element \"{}\"", elem.name());
            }
@@ -819,7 +469,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
 
         // [Description]
         skip_blanks();
-        if( is_directive() )
+        if( eat_directive_start() )
            {
             const plcb::Directive dir = collect_directive();
             if( dir.key() == "DE"sv ) elem.set_descr( dir.value() );
@@ -834,10 +484,11 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
            }
         //DBGLOG("    [*] Collected enum element: name=\"{}\" value=\"{}\" descr=\"{}\"\n", elem.name(), elem.value(), elem.descr())
         return has_next;
-       };
+       }
 
-    //---------------------------------
-    auto collect_rest_of_enum = [&](plcb::Enum& en) -> void
+
+    //-----------------------------------------------------------------------
+    void collect_rest_of_enum(plcb::Enum& en)
        {// <name>: ( { DE:"enum descr" }
         //     VAL1 := 0, { DE:"elem descr" }
         //     VAL2 := -1 { DE:"elem desc" }
@@ -847,7 +498,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         skip_blanks();
         eat_line_end(); // Possibile interruzione di linea
         skip_blanks();
-        if( is_directive() )
+        if( eat_directive_start() )
            {
             const plcb::Directive dir = collect_directive();
             if( dir.key() == "DE"sv ) en.set_descr( dir.value() );
@@ -865,7 +516,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
 
         // End expected
         skip_blanks();
-        if( !eat_string(");"sv) )
+        if( !eat(");"sv) )
            {
             throw fmtstr::error("Expected termination \");\" after enum \"{}\"", en.name());
            }
@@ -877,12 +528,13 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             notify_error("Unexpected content after enum \"{}\": {}", en.name(), str::escape(skip_line()));
            }
         //DBGLOG("    [*] Collected enum \"{}\", {} elements\n", en.name(), en.elements().size())
-       };
+       }
 
-    //---------------------------------
-    auto collect_rest_of_subrange = [&](plcb::Subrange& subr) -> void
-    {// <name> : DINT (5..23); { DE:"descr" }
-     // Name already collected, ':' already skipped
+
+    //-----------------------------------------------------------------------
+    void collect_rest_of_subrange(plcb::Subrange& subr)
+       {// <name> : DINT (5..23); { DE:"descr" }
+        // Name already collected, ':' already skipped
 
         // [Type]
         skip_blanks();
@@ -898,7 +550,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
         skip_blanks();
         const auto min_val = extract_integer(); // extract_double(); // Nah, Floating point numbers seems not supported
         skip_blanks();
-        if( !eat_string(".."sv) )
+        if( !eat(".."sv) )
            {
             throw fmtstr::error("Expected \"..\" in subrange \"{}\"", subr.name());
            }
@@ -920,7 +572,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
 
         // [Description]
         skip_blanks();
-        if(is_directive())
+        if( eat_directive_start() )
            {
             const plcb::Directive dir = collect_directive();
             if(dir.key() == "DE"sv) subr.set_descr(dir.value());
@@ -934,573 +586,616 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             notify_error("Unexpected content after subrange \"{}\" declaration: {}", subr.name(), str::escape(skip_line()));
            }
         //DBGLOG("    [*] Collected subrange: name=\"{}\" type=\"{}\" min=\"{}\" max=\"{}\" descr=\"{}\"\n", subr.name(), subr.type(), subr.min(), subr.max(), subr.descr())
-    };
+       }
 
 
-    enum class STS
+    //-----------------------------------------------------------------------
+    void collect_var_block(std::vector<plcb::Variable>& vars, const bool value_needed =false)
        {
-        HEADER,
-        SEE,
-        POU,
-        MACRO,
-        GLOBALVARS,
-        TYPE
-       } status = STS::HEADER;
-
-    enum class SUB
-       {
-        GET_HEADER,
-        GET_VARS,
-        GET_BODY
-       } substatus = SUB::GET_HEADER;
-
-    struct
-       {
-        std::string_view pou_start;
-        std::string_view pou_end;
-        std::vector<plcb::Pou>* pous = nullptr;
-        std::vector<plcb::Variable>* vars = nullptr;
-        plcb::Variables_Groups* gvars = nullptr;
-        bool var_value_needed = false;
-       } collecting;
-
-    try{
         while( i<siz )
            {
-            //EVTLOG("main: offset:{} char:{} status:{}", i, buf[i], (int)status)
-            switch( status )
+            skip_blanks();
+            if( eat_token("END_VAR"sv) )
                {
-                // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
-                case STS::SEE : // See what we have
-                    skip_blanks();
-                    if( i>=siz )
-                       {
-                        continue;
+                break;
+               }
+            else if( eat_block_comment_start() )
+               {// Nella lista variabili sono ammesse righe di commento
+                skip_block_comment();
+               }
+            else
+               {// Expected a variable entry
+                vars.push_back( collect_variable() );
+                //DBGLOG("  variable \"{}\": {}\n", vars.back().name(), vars.back().descr())
+                // Check if a value was needed
+                if( value_needed && !vars.back().has_value() )
+                   {
+                    throw fmtstr::error("Value not specified for var \"{}\"", vars.back().name());
+                   }
+               }
+           }
+       }
+
+
+    //-----------------------------------------------------------------------
+    void collect_pou_header(plcb::Pou& pou, const std::string_view start_tag, const std::string_view end_tag)
+       {
+        while( i<siz )
+           {
+            skip_blanks();
+            if(i>=siz)
+               {
+                throw fmtstr::error("{} not closed by {}", start_tag, end_tag);
+               }
+            else if( eat_line_end() )
+               {// Sono ammesse righe vuote
+                continue;
+               }
+            else
+               {
+                if( eat_directive_start() )
+                   {
+                    const plcb::Directive dir = collect_directive();
+                    if( dir.key() == "DE"sv )
+                       {// Is a description
+                        if( !pou.descr().empty() )
+                           {
+                            notify_error("{} has already a description: {}", start_tag, pou.descr());
+                           }
+                        pou.set_descr( dir.value() );
+                        //DBGLOG("    {} description: {}\n", start_tag, dir.value())
                        }
-                    else if( eat_comment_start() )
+                    else if( dir.key() == "CODE"sv )
+                       {// Header finished
+                        pou.set_code_type( dir.value() );
+                        break;
+                       }
+                    else
                        {
-                        skip_comment();
+                        notify_error("Unexpected directive \"{}\" in {} {}", dir.key(), start_tag, pou.name());
+                       }
+                   }
+                else if( eat_token("VAR_INPUT"sv) )
+                   {
+                    collect_var_block( pou.input_vars() );
+                   }
+                else if( eat_token("VAR_OUTPUT"sv) )
+                   {
+                    collect_var_block( pou.output_vars() );
+                   }
+                else if( eat_token("VAR_IN_OUT"sv) )
+                   {
+                    collect_var_block( pou.inout_vars() );
+                   }
+                else if( eat_token("VAR_EXTERNAL"sv) )
+                   {
+                    collect_var_block( pou.external_vars() );
+                   }
+                else if( eat_token("VAR"sv) )
+                   {
+                    // Check if there's some additional attributes
+                    skip_blanks();
+                    if( eat_token("CONSTANT"sv) )
+                       {
+                        collect_var_block( pou.local_constants(), true );
                        }
                     else if( eat_line_end() )
                        {
-                        continue;
+                        collect_var_block( pou.local_vars() );
                        }
-                    else if( eat_token("PROGRAM"sv) )
+                    else
                        {
-                        collecting.pou_start = "PROGRAM"sv;
-                        collecting.pou_end = "END_PROGRAM"sv;
-                        collecting.pous = &(lib.programs());
+                        throw fmtstr::error("Unexpected content in header of {} {}: {}", start_tag, pou.name(), str::escape(skip_line()));
+                       }
+                   }
+                else if( eat_token(end_tag) )
+                   {
+                    notify_error("Truncated {} {}", start_tag, pou.name());
+                    status = STS::SEE;
+                   }
+                else
+                   {
+                    notify_error("Unexpected content in {} {} header: {}", start_tag, pou.name(), str::escape(skip_line()));
+                   }
+               }
+           }
+       }
 
-                        skip_blanks();
-                        std::string_view name = collect_identifier();
-                        //DBGLOG("Found {} {} in line {}\n", collecting.pou_start, name, line)
-                        collecting.pous->emplace_back();
-                        collecting.pous->back().set_name(name);
-                        status = STS::POU;
-                        substatus = SUB::GET_HEADER;
-                       }
-                    else if( eat_token("FUNCTION_BLOCK"sv) )
-                       {
-                        collecting.pou_start = "FUNCTION_BLOCK"sv;
-                        collecting.pou_end = "END_FUNCTION_BLOCK"sv;
-                        collecting.pous = &(lib.function_blocks());
 
-                        skip_blanks();
-                        std::string_view name = collect_identifier();
-                        //DBGLOG("Found {} {} in line {}\n", collecting.pou_start, name, line)
-                        collecting.pous->emplace_back();
-                        collecting.pous->back().set_name(name);
-                        status = STS::POU;
-                        substatus = SUB::GET_HEADER;
-                       }
-                    else if( eat_token("FUNCTION"sv) )
-                       {
-                        collecting.pou_start = "FUNCTION"sv;
-                        collecting.pou_end = "END_FUNCTION"sv;
-                        collecting.pous = &(lib.functions());
+    //-----------------------------------------------------------------------
+    void collect_pou(plcb::Pou& pou, const std::string_view start_tag, const std::string_view end_tag, const bool needs_ret_type =false)
+       {
+        //POU NAME : RETURN_VALUE
+        //{ DE:"Description" }
+        //    VAR_YYY
+        //    ...
+        //    END_VAR
+        //    { CODE:ST }
+        //(* Body *)
+        //END_POU
 
-                        skip_blanks();
-                        std::string_view name = collect_identifier();
-                        //DBGLOG("Found {} {} in line {}\n", collecting.pou_start, name, line)
-                        collecting.pous->emplace_back();
-                        collecting.pous->back().set_name(name);
-                        // Dopo il nome dovrebbe esserci la dichiarazione del parametro ritornato
-                        skip_blanks();
-                        if( i>=siz || buf[i]!=':' ) throw fmtstr::error("Missing return type in function \"{}\"", name);
-                        ++i; // Skip ':'
-                        skip_blanks();
-                        collecting.pous->back().set_return_type( collect_until_char_trimmed('\n') );
-                        status = STS::POU;
-                        substatus = SUB::GET_HEADER;
+        //DBGLOG("Collecting {} in line {}\n", start_tag, line)
+
+        // Get name
+        skip_blanks();
+        pou.set_name( collect_identifier() );
+        if( pou.name().empty() )
+           {
+            throw fmtstr::error("No name found for {}", start_tag);
+           }
+
+        // Get possible return type
+        // Dopo il nome dovrebbe esserci la dichiarazione del parametro ritornato
+        skip_blanks();
+        if( i<siz && buf[i]==':' )
+           {// Got a return type!
+            ++i; // Skip ':'
+            skip_blanks();
+            pou.set_return_type( collect_until_char_trimmed('\n') );
+            if( pou.return_type().empty() )
+               {
+                throw fmtstr::error("Empty return type in {} {}", start_tag, pou.name());
+               }
+            if( !needs_ret_type )
+               {
+                throw fmtstr::error("Return type specified in {} {}", start_tag, pou.name());
+               }
+           }
+        else
+           {// No return type
+            if( needs_ret_type )
+               {
+                throw fmtstr::error("Return type not specified in {} {}", start_tag, pou.name());
+               }
+           }
+
+        // Collect description and variables
+        collect_pou_header(pou, start_tag, end_tag);
+
+        // Collect the code body
+        if( pou.code_type().empty() )
+           {
+            throw fmtstr::error("CODE not found in {} {}", start_tag, pou.name());
+           }
+        //else if( pou.code_type() != "ST"sv )
+        //   {
+        //    issues.push_back(fmt::format("Code type: {} for {} {}", dir.value(), start_tag, pou.name()));
+        //   }
+        pou.set_body( collect_until_newline_token(end_tag) );
+        //DBGLOG("    {} {} fully collected at line {}\n", start_tag, pou.name(), line)
+       }
+
+
+    //-----------------------------------------------------------------------
+    void collect_macro_parameters(std::vector<plcb::Parameter>& pars)
+       {
+        while( i<siz )
+           {
+            skip_blanks();
+            if( eat_token("END_PAR"sv) )
+               {
+                substatus = SUB::GET_HEADER;
+               }
+            else if( eat_block_comment_start() )
+               {// Ammetto righe di commento?
+                skip_block_comment();
+               }
+            else if( eat_token("END_MACRO"sv) )
+               {
+                notify_error("Truncated params in macro");
+                break;
+               }
+            else
+               {
+                pars.push_back( collect_macro_parameter() );
+                //DBGLOG("    Macro param {}: {}\n", pars.back().name(), pars.back().descr())
+               }
+           }
+       }
+
+
+    //-----------------------------------------------------------------------
+    void collect_macro_header(plcb::Macro& macro)
+       {
+        while( i<siz )
+           {
+            skip_blanks();
+            if(i>=siz)
+               {
+                throw fmtstr::error("MACRO not closed by END_MACRO");
+               }
+            else if( eat_line_end() )
+               {// Sono ammesse righe vuote
+                continue;
+               }
+            else
+               {
+                if( eat_directive_start() )
+                   {
+                    const plcb::Directive dir = collect_directive();
+                    if( dir.key() == "DE"sv )
+                       {// Is a description
+                        if( !macro.descr().empty() ) notify_error("Macro {} has already a description: {}", macro.name(), macro.descr());
+                        macro.set_descr( dir.value() );
+                        //DBGLOG("    Macro description: {}\n", dir.value())
                        }
-                    else if( eat_token("MACRO"sv) )
+                    else if( dir.key() == "CODE"sv )
                        {
-                        skip_blanks();
-                        std::string_view name = collect_identifier();
-                        //DBGLOG("Found macro {} in line {}\n", name, line)
-                        lib.macros().emplace_back();
-                        lib.macros().back().set_name(name);
-                        status = STS::MACRO;
-                        substatus = SUB::GET_HEADER;
+                        macro.set_code_type( dir.value() );
+                        substatus = SUB::GET_BODY;
                        }
-                    else if( eat_token("TYPE"sv) )
+                    else
                        {
-                        skip_blanks();
-                        //DBGLOG("Found type declaration section in line {}\n", line)
-                        status = STS::TYPE;
+                        notify_error("Unexpected directive \"{}\" in macro {} header", dir.key(), macro.name());
                        }
-                    else if( eat_token("VAR_GLOBAL"sv) )
+                   }
+                else if( eat_token("PAR_MACRO"sv) )
+                   {
+                    if( !macro.parameters().empty() )
                        {
-                        //DBGLOG("Found global vars in line {}\n", line)
-                        // Check if there's some additional attributes
-                        skip_blanks();
-                        if( eat_token("CONSTANT"sv) )
-                           {
-                            collecting.gvars = &( lib.global_constants() );
-                            collecting.var_value_needed = true;
-                            status = STS::GLOBALVARS;
-                           }
-                        else if( eat_line_end() )
-                           {
-                            collecting.gvars = &( lib.global_variables() );
-                            collecting.var_value_needed = false;
-                            status = STS::GLOBALVARS;
+                        notify_error("Multiple groups of macro parameters");
+                       }
+                    collect_macro_parameters();
+                   }
+                else if( eat_token("END_MACRO"sv) )
+                   {
+                    notify_error("Truncated macro");
+                    status = STS::SEE;
+                   }
+                else
+                   {
+                    notify_error("Unexpected content in header of macro {}: {}", macro.name(), str::escape(skip_line()));
+                   }
+               }
+           }
+       }
+
+
+    //-----------------------------------------------------------------------
+    void collect_macro(plcb::Macro& macro)
+       {
+        //MACRO IS_MSG
+        //{ DE:"Macro description" }
+        //    PAR_MACRO
+        //    WHAT; { DE:"Parameter description" }
+        //    END_PAR
+        //    { CODE:ST }
+        //(* Macro body *)
+        //END_MACRO
+
+        // Get name
+        skip_blanks();
+        macro.set_name( collect_identifier() );
+        if( macro.name().empty() )
+           {
+            throw fmtstr::error("No name found for MACRO");
+           }
+
+        collect_macro_header(macro);
+
+        // Collect the code body
+        if( macro.code_type().empty() )
+           {
+            throw fmtstr::error("CODE not found in MACRO {}", macro.name());
+           }
+        //else if( macro.code_type() != "ST"sv )
+        //   {
+        //    issues.push_back(fmt::format("Code type: {} for MACRO {}", dir.value(), macro.name()));
+        //   }
+        macro.set_body( collect_until_newline_token("END_MACRO"sv) );
+       }
+
+
+    //-----------------------------------------------------------------------
+    void collect_global_vars(plcb::Variables_Groups& vgroups, const bool value_needed =false)
+       {
+        //    VAR_GLOBAL
+        //    {G:"System"}
+        //    Cnc : fbCncM32; { DE:"Cnc device" }
+        //    {G:"Arrays"}
+        //    vbMsgs AT %MB300.6000 : ARRAY[ 0..999 ] OF BOOL; { DE:"ivbMsgs Array messaggi attivati !MAX_MESSAGES!" }
+        //    END_VAR
+        while( i<siz )
+           {
+            skip_blanks();
+            if( i>=siz )
+               {
+                throw fmtstr::error("VAR_GLOBAL not closed by END_VAR");
+               }
+            else if( eat_line_end() )
+               {// Nella lista variabili sono ammesse righe vuote
+               }
+            else if( eat_block_comment_start() )
+               {// Nella lista variabili sono ammesse righe di commento
+                skip_block_comment();
+               }
+            else if( eat_directive_start() )
+               {
+                const plcb::Directive dir = collect_directive();
+                if( dir.key() == "G" )
+                   {// È la descrizione di un gruppo di variabili
+                    if( dir.value().find(' ')!=std::string::npos )
+                       {
+                        notify_error("Avoid spaces in var group name \"{}\"", dir.value());
+                       }
+                    vgroups.emplace_back();
+                    vgroups.back().set_name( dir.value() );
+                   }
+                else
+                   {
+                    notify_error("Unexpected directive \"{}\" in global vars", dir.key());
+                   }
+               }
+            else if( eat_token("END_VAR"sv) )
+               {
+                //DBGLOG("    Global vars end at line {}\n", line)
+                break
+               }
+            else
+               {
+                if( vgroups.empty() ) vgroups.emplace_back(); // Unnamed group
+                vgroups.back().variables().push_back( collect_variable() );
+                //DBGLOG("    Variable {}: {}\n", vgroups.back().variables().back().name(), vgroups.back().variables().back().descr())
+                // Check if a value was needed
+                if( value_needed && !vgroups.back().variables().back().has_value() )
+                   {
+                    throw fmtstr::error("Value not specified for variable \"{}\"", vgroups.back().variables().back().name());
+                   }
+               }
+           }
+       }
+
+
+    //-----------------------------------------------------------------------
+    void collect_type(plcb::xxx& xxx)
+       {
+        //    TYPE
+        //    str_name : STRUCT { DE:"descr" } member : DINT; { DE:"member descr" } ... END_STRUCT;
+        //    typ_name : STRING[ 80 ]; { DE:"descr" }
+        //    en_name: ( { DE:"descr" } VAL1 := 0, { DE:"elem descr" } ... );
+        //    subr_name : DINT (30..100);
+        //    END_TYPE
+        while( i<siz )
+           {
+            skip_blanks();
+            if( i>=siz )
+               {
+                throw fmtstr::error("TYPE not closed by END_TYPE");
+               }
+            else if( eat_line_end() )
+               {
+                continue;
+               }
+            else if( eat_token("END_TYPE"sv) )
+               {
+                status = STS::SEE;
+               }
+            else
+               {// Expected a type name token here
+                const std::string_view type_name = collect_identifier();
+                //DBGLOG("Found typename {} in line {}\n", type_name, line)
+                if( type_name.empty() )
+                   {
+                    notify_error("type name not found");
+                    skip_line();
+                   }
+                else
+                   {
+                    // Expected a colon after the name
+                    skip_blanks();
+                    if( i>=siz || buf[i]!=':' )
+                       {
+                        throw fmtstr::error("Missing \':\' after type name \"{}\"", type_name);
+                       }
+                    ++i; // Skip ':'
+                    // Check what it is (struct, typedef, enum, subrange)
+                    skip_blanks();
+                    if(i>=siz) continue;
+                    if( eat_token("STRUCT"sv) )
+                       {// Struct: <name> : STRUCT
+                        plcb::Struct strct;
+                        strct.set_name(type_name);
+                        collect_rest_of_struct( strct );
+                        //DBGLOG("    struct {}, {} members\n", strct.name(), strct.members().size())
+                        lib.structs().push_back( std::move(strct) );
+                       }
+                    else if( buf[i]=='(' )
+                       {// Enum: <name>: (...
+                        ++i; // Skip '('
+                        plcb::Enum en;
+                        en.set_name(type_name);
+                        collect_rest_of_enum( en );
+                        //DBGLOG("    enum {}, {} constants\n", en.name(), en.elements().size())
+                        lib.enums().push_back( std::move(en) );
+                       }
+                    else
+                       {// Could be a typedef or a subrange
+                        // Unfortunately I have to peek to see which is
+                        std::size_t j = i;
+                        while(j<siz && buf[j]!=';' && buf[j]!='(' && buf[j]!='{' && buf[j]!='\n' ) ++j;
+                        if(j<siz && buf[j]=='(' )
+                           {// Subrange: <name> : <type> (<min>..<max>); { DE:"descr" }
+                            plcb::Subrange subr;
+                            subr.set_name(type_name);
+                            collect_rest_of_subrange(subr);
+                            lib.subranges().push_back( std::move(subr) );
                            }
                         else
-                           {
-                            throw fmtstr::error("Unexpected content in global variables declaration: {}", str::escape(skip_line()));
+                           {// Typedef: <name> : <type>; { DE:"descr" }
+                            plcb::Variable var;
+                            var.set_name(type_name);
+                            collect_rest_of_variable( var );
+                            //DBGLOG("    typedef {}: {}\n", var.name(), var.type())
+                            lib.typedefs().push_back( plcb::TypeDef(var) );
                            }
                        }
-                    else
-                       {
-                        notify_error("Unexpected content: {}", str::escape(skip_line()));
-                       }
-                    break; // STS::SEE
+                   }
+               }
+           }
+       }
 
-                // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
-                case STS::POU :
-                    //POU NAME : RETURN_VALUE
-                    //{ DE:"Description" }
-                    //    VAR_YYY
-                    //    ...
-                    //    END_VAR
-                    //    { CODE:ST }
-                    //(* Body *)
-                    //END_POU
-                    skip_blanks();
-                    if(i>=siz)
-                       {
-                        throw fmtstr::error("{} not closed by {}", collecting.pou_start, collecting.pou_end);
-                       }
-                    else if( substatus!=SUB::GET_BODY && eat_line_end() )
-                       {// Sono ammesse righe vuote
-                        continue;
-                       }
-                    else
-                       {
-                        switch(substatus)
-                           {
-                            case SUB::GET_HEADER :
-                                if( is_directive() )
-                                   {
-                                    const plcb::Directive dir = collect_directive();
-                                    if( dir.key() == "DE"sv )
-                                       {// Is a description
-                                        if( !collecting.pous->back().descr().empty() ) notify_error("{} has already a description: {}", collecting.pou_start, collecting.pous->back().descr());
-                                        collecting.pous->back().set_descr( dir.value() );
-                                        //DBGLOG("    {} description: {}\n", collecting.pou_start, dir.value())
-                                       }
-                                    else if( dir.key() == "CODE"sv )
-                                       {
-                                        //if( dir.value() != "ST" ) notify_error("Code type: {} for {} {}", dir.value(), collecting.pou_start, collecting.pous->back().name());
-                                        collecting.pous->back().set_code_type( dir.value() );
-                                        substatus = SUB::GET_BODY;
-                                       }
-                                    else
-                                       {
-                                        notify_error("Unexpected directive \"{}\" in {} {}", dir.key(), collecting.pou_start, collecting.pous->back().name());
-                                       }
-                                   }
-                                else if( eat_token("VAR_INPUT"sv) )
-                                   {
-                                    collecting.vars = &( collecting.pous->back().input_vars() );
-                                    collecting.var_value_needed = false;
-                                    substatus = SUB::GET_VARS;
-                                   }
-                                else if( eat_token("VAR_OUTPUT"sv) )
-                                   {
-                                    collecting.vars = &( collecting.pous->back().output_vars() );
-                                    collecting.var_value_needed = false;
-                                    substatus = SUB::GET_VARS;
-                                   }
-                                else if( eat_token("VAR_IN_OUT"sv) )
-                                   {
-                                    collecting.vars = &( collecting.pous->back().inout_vars() );
-                                    collecting.var_value_needed = false;
-                                    substatus = SUB::GET_VARS;
-                                   }
-                                else if( eat_token("VAR_EXTERNAL"sv) )
-                                   {
-                                    collecting.vars = &( collecting.pous->back().external_vars() );
-                                    collecting.var_value_needed = false;
-                                    substatus = SUB::GET_VARS;
-                                   }
-                                else if( eat_token("VAR"sv) )
-                                   {
-                                    // Check if there's some additional attributes
-                                    skip_blanks();
-                                    if( eat_token("CONSTANT"sv) )
-                                       {
-                                        collecting.vars = &( collecting.pous->back().local_constants() );
-                                        collecting.var_value_needed = true;
-                                        substatus = SUB::GET_VARS;
-                                       }
-                                    else if( eat_line_end() )
-                                       {
-                                        collecting.vars = &( collecting.pous->back().local_vars() );
-                                        collecting.var_value_needed = false;
-                                        substatus = SUB::GET_VARS;
-                                       }
-                                    else
-                                       {
-                                        throw fmtstr::error("Unexpected content in header of {} {}: {}", collecting.pou_start, collecting.pous->back().name(), str::escape(skip_line()));
-                                       }
-                                   }
-                                else if( eat_token(collecting.pou_end) )
-                                   {
-                                    notify_error("Truncated {} {}", collecting.pou_start, collecting.pous->back().name());
-                                    status = STS::SEE;
-                                   }
-                                else
-                                   {
-                                    notify_error("Unexpected content in {} {} header: {}", collecting.pou_start, collecting.pous->back().name(), str::escape(skip_line()));
-                                   }
-                                break;
 
-                            case SUB::GET_VARS :
-                                if( eat_token("END_VAR"sv) )
-                                   {
-                                    substatus = SUB::GET_HEADER;
-                                   }
-                                else if( eat_comment_start() )
-                                   {// Nella lista variabili sono ammesse righe di commento
-                                    skip_comment();
-                                   }
-                                else if( eat_token(collecting.pou_end) )
-                                   {
-                                    notify_error("Truncated vars in {} {}", collecting.pou_start, collecting.pous->back().name());
-                                    status = STS::SEE;
-                                   }
-                                else
-                                   {
-                                    collecting.vars->push_back( collect_variable() );
-                                    //DBGLOG("    {} variable \"{}\": {}\n", collecting.pou_start, collecting.vars->back().name(), collecting.vars->back().descr())
-                                    // Check if a value was needed
-                                    if( collecting.var_value_needed && !collecting.vars->back().has_value() ) throw fmtstr::error("Value not specified for variable \"{}\"", collecting.vars->back().name());
-                                   }
-                                break;
-
-                            case SUB::GET_BODY :
-                                collecting.pous->back().set_body( collect_until_newline_token(collecting.pou_end) );
-                                //DBGLOG("    {} {} fully collected at line {}\n", collecting.pou_start, collecting.pous->back().name(), line)
-                                status = STS::SEE;
-                                break;
-                           } // 'substatus'
-                       }
-                    break; // STS::POU
-
-                // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
-                case STS::MACRO : // Collecting macro definition
-                    //MACRO IS_MSG
-                    //
-                    //{ DE:"Macro description" }
-                    //
-                    //    PAR_MACRO
-                    //    WHAT; {DE:"Parameter description"}
-                    //    END_PAR
-                    //
-                    //    { CODE:ST }
-                    //(* Macro body *)
-                    //END_MACRO
-                    skip_blanks();
-                    if( i>=siz )
+    //-----------------------------------------------------------------------
+    void check_heading_comment(plcb::Library& lib)
+       {
+        while( i<siz )
+           {
+            skip_blanks();
+            if( i>=siz )
+               {// No more data!
+                break;
+               }
+            else if( eat_line_end() )
+               {// Skip empty line
+                continue;
+               }
+            else if( eat_block_comment_start() )
+               {// Could be my custom header
+                //(*
+                //    name: test
+                //    descr: Libraries for strato machines (Macotec M-series machines)
+                //    version: 0.5.0
+                //    author: MG
+                //    dependencies: Common.pll, defvar.pll, iomap.pll, messages.pll
+                //*)
+                std::size_t j = i; // Where comment content starts
+                skip_block_comment();
+                const std::size_t j_end = i-2; // Where comment content ends
+                // Check line by line
+                while( j < j_end )
+                   {
+                    // Get key
+                    while( j<j_end && is_blank(buf[j]) ) ++j; // Skip blanks
+                    std::size_t j_start = j;
+                    while( j<j_end && std::isalnum(buf[j]) ) ++j;
+                    const std::string_view key(buf.data()+j_start, j-j_start);
+                    if( !key.empty() )
                        {
-                        throw fmtstr::error("MACRO not closed by END_MACRO");
-                       }
-                    else if( substatus!=SUB::GET_BODY && eat_line_end() )
-                       {
-                        continue;
-                       }
-                    else
-                       {
-                        switch(substatus)
-                           {
-                            case SUB::GET_HEADER :
-                                if( is_directive() )
-                                   {
-                                    const plcb::Directive dir = collect_directive();
-                                    if( dir.key() == "DE"sv )
-                                       {// Is a description
-                                        if( !lib.macros().back().descr().empty() ) notify_error("Macro {} has already a description: {}", lib.macros().back().name(), lib.macros().back().descr());
-                                        lib.macros().back().set_descr( dir.value() );
-                                        //DBGLOG("    Macro description: {}\n", dir.value())
-                                       }
-                                    else if( dir.key() == "CODE"sv )
-                                       {
-                                        //if( dir.value() != "ST" ) notify_error("Macro {} has code type: {}", lib.macros().back().name(), dir.value());
-                                        lib.macros().back().set_code_type( dir.value() );
-                                        substatus = SUB::GET_BODY;
-                                       }
-                                    else
-                                       {
-                                        notify_error("Unexpected directive \"{}\" in macro {} header", dir.key(), lib.macros().back().name());
-                                       }
-                                   }
-                                else if( eat_token("PAR_MACRO"sv) )
-                                   {
-                                    if( !lib.macros().back().parameters().empty() ) notify_error("Multiple groups of macro parameters");
-                                    substatus = SUB::GET_VARS;
-                                   }
-                                else if( eat_token("END_MACRO"sv) )
-                                   {
-                                    notify_error("Truncated macro");
-                                    status = STS::SEE;
-                                   }
-                                else
-                                   {
-                                    notify_error("Unexpected content in header of macro {}: {}", lib.macros().back().name(), str::escape(skip_line()));
-                                   }
-                                break;
-
-                            case SUB::GET_VARS :
-                                if( eat_token("END_PAR"sv) )
-                                   {
-                                    substatus = SUB::GET_HEADER;
-                                   }
-                                else if( eat_token("END_MACRO"sv) )
-                                   {
-                                    notify_error("Truncated params in macro {}", lib.macros().back().name());
-                                    status = STS::SEE;
-                                   }
-                                else
-                                   {
-                                    lib.macros().back().parameters().push_back( collect_parameter() );
-                                    //DBGLOG("    Macro param {}: {}\n", lib.macros().back().parameters().back().name(), lib.macros().back().parameters().back().descr())
-                                   }
-                                break;
-
-                            case SUB::GET_BODY :
-                                lib.macros().back().set_body( collect_until_newline_token("END_MACRO"sv) );
-                                //DBGLOG("    Macro {} fully collected at line {}\n", lib.macros().back().name(), line)
-                                status = STS::SEE;
-                                break;
-                           } // 'substatus'
-                       }
-                    break; // STS::MACRO
-
-                // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
-                case STS::GLOBALVARS : // Collecting global variables
-                    //    VAR_GLOBAL
-                    //    {G:"System"}
-                    //    Cnc : fbCncM32; { DE:"Cnc device" }
-                    //    {G:"Arrays"}
-                    //    vbMsgs AT %MB300.6000 : ARRAY[ 0..999 ] OF BOOL; { DE:"ivbMsgs Array messaggi attivati !MAX_MESSAGES!" }
-                    //    END_VAR
-                    skip_blanks();
-                    if( i>=siz )
-                       {
-                        throw fmtstr::error("VAR_GLOBAL not closed by END_VAR");
-                       }
-                    else if( eat_line_end() )
-                       {// Nella lista variabili sono ammesse righe vuote
-                       }
-                    else if( eat_comment_start() )
-                       {// Nella lista variabili sono ammesse righe di commento
-                        skip_comment();
-                       }
-                    else if( is_directive() )
-                       {
-                        const plcb::Directive dir = collect_directive();
-                        if( dir.key() == "G" )
-                           {// È la descrizione di un gruppo di variabili
-                            if( dir.value().find(' ')!=std::string::npos ) notify_error("Avoid spaces in group name \"{}\"", dir.value());
-                            collecting.gvars->groups().emplace_back();
-                            collecting.gvars->groups().back().set_name( dir.value() );
-                           }
-                        else
-                           {
-                            notify_error("Unexpected directive \"{}\" in global vars", dir.key());
-                           }
-                       }
-                    else if( eat_token("END_VAR"sv) )
-                       {
-                        //DBGLOG("    Global vars end at line {}\n", line)
-                        status = STS::SEE;
-                       }
-                    else
-                       {
-                        if( collecting.gvars->groups().empty() ) collecting.gvars->groups().emplace_back(); // Unnamed group
-                        collecting.gvars->groups().back().variables().push_back( collect_variable() );
-                        //DBGLOG("    Variable {}: {}\n", collecting.gvars->groups().back().variables().back().name(), collecting.gvars->groups().back().variables().back().descr())
-                        // Check if a value was needed
-                        if( collecting.var_value_needed && !collecting.gvars->groups().back().variables().back().has_value() ) throw fmtstr::error("Value not specified for variable \"{}\"", collecting.gvars->groups().back().variables().back().name());
-                       }
-                    break; // STS::GLOBALVARS
-
-                // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
-                case STS::TYPE : // Collecting struct/typdef/enum/subrange
-                    //    TYPE
-                    //    str_name : STRUCT { DE:"descr" } member : DINT; { DE:"member descr" } ... END_STRUCT;
-                    //    typ_name : STRING[ 80 ]; { DE:"descr" }
-                    //    en_name: ( { DE:"descr" } VAL1 := 0, { DE:"elem descr" } ... );
-                    //    subr_name : DINT (30..100);
-                    //    END_TYPE
-                    skip_blanks();
-                    if( i>=siz )
-                       {
-                        throw fmtstr::error("TYPE not closed by END_TYPE");
-                       }
-                    else if( eat_line_end() )
-                       {
-                        continue;
-                       }
-                    else if( eat_token("END_TYPE"sv) )
-                       {
-                        status = STS::SEE;
-                       }
-                    else
-                       {// Expected a type name token here
-                        std::string_view type_name = collect_identifier();
-                        //DBGLOG("Found typename {} in line {}\n", type_name, line)
-                        if( type_name.empty() )
-                           {
-                            notify_error("type name not found");
-                            skip_line();
-                           }
-                        else
-                           {
-                            // Expected a colon after the name
-                            skip_blanks();
-                            if( i>=siz || buf[i]!=':' ) throw fmtstr::error("Missing \':\' after type name \"{}\"", type_name);
-                            ++i; // Skip ':'
-                            // Check what it is (struct, typedef, enum, subrange)
-                            skip_blanks();
-                            if(i>=siz) continue;
-                            if( eat_token("STRUCT"sv) )
-                               {// Struct: <name> : STRUCT
-                                plcb::Struct strct;
-                                strct.set_name(type_name);
-                                collect_rest_of_struct( strct );
-                                //DBGLOG("    struct {}, {} members\n", strct.name(), strct.members().size())
-                                lib.structs().push_back( std::move(strct) );
-                               }
-                            else if( buf[i]=='(' )
-                               {// Enum: <name>: (...
-                                ++i; // Skip '('
-                                plcb::Enum en;
-                                en.set_name(type_name);
-                                collect_rest_of_enum( en );
-                                //DBGLOG("    enum {}, {} constants\n", en.name(), en.elements().size())
-                                lib.enums().push_back( std::move(en) );
-                               }
-                            else
-                               {// Could be a typedef or a subrange
-                                // Unfortunately I have to peek to see which is
-                                std::size_t j = i;
-                                while(j<siz && buf[j]!=';' && buf[j]!='(' && buf[j]!='{' && buf[j]!='\n' ) ++j;
-                                if(j<siz && buf[j]=='(' )
-                                   {// Subrange: <name> : <type> (<min>..<max>); { DE:"descr" }
-                                    plcb::Subrange subr;
-                                    subr.set_name(type_name);
-                                    collect_rest_of_subrange(subr);
-                                    lib.subranges().push_back( std::move(subr) );
-                                   }
-                                else
-                                   {// Typedef: <name> : <type>; { DE:"descr" }
-                                    plcb::Variable var;
-                                    var.set_name(type_name);
-                                    collect_rest_of_variable( var );
-                                    //DBGLOG("    typedef {}: {}\n", var.name(), var.type())
-                                    lib.typedefs().push_back( plcb::TypeDef(var) );
-                                   }
-                               }
-                           }
-                       }
-                    break; // STS::TYPE
-
-                // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --
-                case STS::HEADER : // Check my custom header for the library
-                    skip_blanks();
-                    if( i>=siz )
-                       {
-                        continue;
-                       }
-                    else if( eat_line_end() )
-                       {
-                        continue;
-                       }
-                    else if( eat_comment_start() )
-                       {// Could be my custom header
-                        //(*
-                        //    descr: "Wrapper to Sipro facilities (Macotec M-series machines)"
-                        //    version: "0.5.0"
-                        //    author: "©2017-2021 Matteo Gattanini"
-                        //    dependencies: "defvar.pll"
-                        //*)
-                        std::size_t j = i; // Where comment content starts
-                        skip_comment();
-                        const std::size_t j_end = i-2; // Where comment content ends
-                        // Check line by line
-                        while( j < j_end )
-                           {
-                            // Get key
+                        // Get separator
+                        while( j<j_end && is_blank(buf[j]) ) ++j; // Skip blanks
+                        if( buf[j]==':' )
+                           {// Get value
+                            ++j; // Skip ':'
                             while( j<j_end && is_blank(buf[j]) ) ++j; // Skip blanks
-                            std::size_t j_start = j;
-                            while( j<j_end && std::isalnum(buf[j]) ) ++j;
-                            const std::string_view key(buf.data()+j_start, j-j_start);
-                            if( !key.empty() )
+                            j_start = j;
+                            while( j<j_end && buf[j]!='\r' && buf[j]!='\n' ) ++j;
+                            const std::string_view val(buf.data()+j_start, j-j_start);
+                            if( !val.empty() )
                                {
-                                // Get separator
-                                while( j<j_end && is_blank(buf[j]) ) ++j; // Skip blanks
-                                if( buf[j]==':' )
-                                   {// Get value
-                                    ++j; // Skip ':'
-                                    while( j<j_end && is_blank(buf[j]) ) ++j; // Skip blanks
-                                    j_start = j;
-                                    while( j<j_end && buf[j]!='\r' && buf[j]!='\n' ) ++j;
-                                    const std::string_view val(buf.data()+j_start, j-j_start);
-                                    if( !val.empty() )
-                                       {
-                                        //DBGLOG("    Found key/value {}:{}\n", key, val)
-                                        if(key.starts_with("descr"sv)) lib.set_descr(val);
-                                        else if(key=="version"sv) lib.set_version(val);
-                                       }
-                                   }
+                                //DBGLOG("    Found key/value {}:{}\n", key, val)
+                                if(key.starts_with("descr"sv)) lib.set_descr(val);
+                                else if(key=="version"sv) lib.set_version(val);
                                }
-                            while( j<j_end && buf[j]!='\n' ) ++j; // Ensure to skip this line
-                            ++j; // Skip '\n'
                            }
                        }
-                    else
-                       {
-                        status = STS::SEE;
-                       }
-                    break; // STS::HEADER
+                    while( j<j_end && buf[j]!='\n' ) ++j; // Ensure to skip this line
+                    ++j; // Skip '\n'
+                   }
+               }
+            else
+               {// Heading comment not found
+                break;
+               }
+           }
+       }
 
-               } // 'switch(status)'
-           } // while there's data
+
+    //-----------------------------------------------------------------------
+    void collect_next(plcb::Library& lib)
+       {
+        skip_blanks();
+        if( i>=siz )
+           {
+            continue;
+           }
+        else if( eat_block_comment_start() )
+           {
+            skip_block_comment();
+           }
+        else if( eat_line_end() )
+           {
+            continue;
+           }
+        else if( eat_token("PROGRAM"sv) )
+           {
+            auto& prg = lib.programs().emplace_back();
+            collect_pou(prg, "PROGRAM"sv, "END_PROGRAM"sv);
+           }
+        else if( eat_token("FUNCTION_BLOCK"sv) )
+           {
+            auto& fb = lib.function_blocks().emplace_back();
+            collect_pou(fb, "FUNCTION_BLOCK"sv, "END_FUNCTION_BLOCK"sv);
+           }
+        else if( eat_token("FUNCTION"sv) )
+           {
+            auto& fn = lib.functions().emplace_back();
+            collect_pou(fn, "FUNCTION"sv, "END_FUNCTION"sv, true);
+           }
+        else if( eat_token("MACRO"sv) )
+           {
+            //DBGLOG("Found MACRO in line {}\n", line)
+            auto& macro = lib.macros().emplace_back();
+            collect_macro(macro);
+           }
+        else if( eat_token("TYPE"sv) )
+           {// struct/typdef/enum/subrange
+            //DBGLOG("Found type decl in line {}\n", line)
+            skip_blanks();
+            status = STS::TYPE;
+           }
+        else if( eat_token("VAR_GLOBAL"sv) )
+           {
+            //DBGLOG("Found global vars in line {}\n", line)
+            // Check if there's some additional attributes
+            skip_blanks();
+            if( eat_token("CONSTANT"sv) )
+               {
+                collect_global_vars( lib.global_constants(), true );
+               }
+            else if( eat_line_end() )
+               {
+                collect_global_vars( lib.global_variables() );
+               }
+            else
+               {
+                throw fmtstr::error("Unexpected content in global variables declaration: {}", str::escape(skip_line()));
+               }
+           }
+        else
+           {
+            notify_error("Unexpected content: {}", str::escape(skip_line()));
+           }
+       }
+};
+
+
+
+//---------------------------------------------------------------------------
+// Parse pll file
+void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::string>& issues, const bool fussy)
+{
+    Parser parser(buf, issues, fussy);
+
+    try{
+        parser.check_heading_comment(lib);
+        while( i<siz )
+           {
+            //EVTLOG("main loop: offset:{} char:{}", i, buf[i])
+            parser.collect_next(lib);
+           }
+       }
+    catch(fmtstr::parse_error)
+       {
+        throw;
        }
     catch(std::exception& e)
        {
         throw fmtstr::parse_error(e.what(), line, i);
        }
-    #undef notify_error
 }
 
 
 }//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-
-
 
 //---- end unit -------------------------------------------------------------
 #endif

@@ -16,10 +16,8 @@
 #include <charconv> // std::from_chars
 #include <fmt/core.h> // fmt::format
 
-#include "string-utilities.hpp" // str::escape
+#include "basic-parser.hpp" // BasicParser
 #include "plc-elements.hpp" // plc::*, plcb::*
-#include "format_string.hpp" // fmtstr::parse_error
-#include "debug.hpp" // DBGLOG
 #include "sipro.hpp" // sipro::
 
 using namespace std::literals; // "..."sv
@@ -32,7 +30,7 @@ namespace h //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 /////////////////////////////////////////////////////////////////////////////
 // Descriptor of a '#define' entry in a buffer
-class DefineBuf
+class DefineBuf final
 {
  public:
     [[nodiscard]] operator bool() const noexcept { return !i_Value.empty(); }
@@ -74,43 +72,15 @@ class DefineBuf
 };
 
 
+
 /////////////////////////////////////////////////////////////////////////////
-// consteval friendly:
-#define notify_error(...) \
-   {\
-    if(fussy) throw std::runtime_error( fmt::format(__VA_ARGS__) );\
-    else issues.push_back( fmt::format("{} (line {}, offset {})"sv, fmt::format(__VA_ARGS__), line, i) );\
-   }
-/////////////////////////////////////////////////////////////////////////////
-class Parser
+class Parser final : public BasicParser
 {
  public:
     Parser(const std::string_view b, std::vector<std::string>& sl, const bool f)
-      : buf(b.data())
-      , siz(b.size())
-      , line(1)
-      , i(0)
-      , issues(sl)
-      , fussy(f)
-       {
-        // Check possible BOM    |  Encoding    |   Bytes     | Chars |
-        //                       |--------------|-------------|-------|
-        //                       | UTF-8        | EF BB BF    | ï»¿   |
-        //                       | UTF-16 (BE)  | FE FF       | þÿ    |
-        //                       | UTF-16 (LE)  | FF FE       | ÿþ    |
-        //                       | UTF-32 (BE)  | 00 00 FE FF | ..þÿ  |
-        //                       | UTF-32 (LE)  | FF FE 00 00 | ÿþ..  |
-        if( siz < 2 )
-           {
-            notify_error("Empty file");
-           }
-        // Supporto solo UTF-8
-        if( buf[0]=='\xFF' || buf[0]=='\xFE' || buf[0]=='\x00' )
-           {
-            throw std::runtime_error("Bad encoding, not UTF-8");
-           }
-       }
+      : BasicParser(b,sl,f) {}
 
+    //-----------------------------------------------------------------------
     [[nodiscard]] DefineBuf next_define()
        {
         DefineBuf def;
@@ -135,8 +105,15 @@ class Parser
                     collect_define(def);
                     break;
                    }
-                else notify_error("Unexpected content: {}", str::escape(skip_line()));
+                else
+                   {
+                    notify_error("Unexpected content: {}", str::escape(skip_line()));
+                   }
                }
+           }
+        catch(fmtstr::parse_error)
+           {
+            throw;
            }
         catch(std::exception& e)
            {
@@ -146,58 +123,8 @@ class Parser
         return def;
        }
 
+
  private:
-    const char* const buf;
-    const std::size_t siz; // buffer size
-    std::size_t line; // Current line number
-    std::size_t i; // Current character
-    std::vector<std::string>& issues; // Problems found
-    const bool fussy;
-
-    //-----------------------------------------------------------------------
-    //template<typename ...Args> void notify_error(const std::string_view msg, Args&&... args) const
-    //   {
-    //    // Unfortunately this generates error: "call to immediate function is not a constant expression"
-    //    //if(fussy) throw std::runtime_error( fmt::format(msg, args...) );
-    //    //else issues.push_back( fmt::format("{} (line {}, offset {})"sv, fmt::format(msg, args...), line, i) );
-    //    if(fussy) throw std::runtime_error( fmt::format(fmt::runtime(msg), args...) );
-    //    else issues.push_back( fmt::format("{} (line {}, offset {})", fmt::format(fmt::runtime(msg), args...), line, i) );
-    //   };
-
-    //-----------------------------------------------------------------------
-    [[nodiscard]] static bool is_blank(const char c) noexcept
-       {
-        return std::isspace(c) && c!='\n';
-       }
-
-    //-----------------------------------------------------------------------
-    // Skip space chars except new line
-    void skip_blanks() noexcept
-       {
-        while( i<siz && is_blank(buf[i]) ) ++i;
-       }
-
-    //-----------------------------------------------------------------------
-    bool eat_line_end() noexcept
-       {
-        assert(i<siz);
-        if( buf[i]=='\n' )
-           {
-            ++i;
-            ++line;
-            return true;
-           }
-        return false;
-       }
-
-    //-----------------------------------------------------------------------
-    std::string_view skip_line() noexcept
-       {
-        const std::size_t i_start = i;
-        while( i<siz && !eat_line_end() ) ++i;
-        return std::string_view(buf+i_start, i-i_start);
-       }
-
     //-----------------------------------------------------------------------
     [[nodiscard]] bool eat_line_comment_start() noexcept
        {
@@ -225,8 +152,7 @@ class Parser
        {
         const std::size_t line_start = line; // Store current line
         const std::size_t i_start = i; // Store current position
-        const std::size_t sizm1 = siz-1;
-        while( i<sizm1 )
+        while( i<i_last )
            {
             if( buf[i]=='*' && buf[i+1]=='/' )
                {
@@ -243,49 +169,12 @@ class Parser
        }
 
     //-----------------------------------------------------------------------
-    [[nodiscard]] bool eat_token(const std::string_view s) noexcept
-       {
-        const std::size_t i_end = i+s.length();
-        if( ((i_end<siz && !std::isalnum(buf[i_end])) || i_end==siz) && s==std::string_view(buf+i,s.length()) )
-           {
-            i = i_end;
-            return true;
-           }
-        return false;
-       }
-
-    //-----------------------------------------------------------------------
-    //[[nodiscard]] bool eat_directive_start() noexcept
-    //   {
-    //    if( i<siz && buf[i]=='#' )
-    //       {
-    //        ++i;
-    //        return true;
-    //       }
-    //    return false;
-    //   }
-
-    //-----------------------------------------------------------------------
-    [[nodiscard]] std::string_view collect_token() noexcept
-       {
-        const std::size_t i_start = i;
-        while( i<siz && !std::isspace(buf[i]) ) ++i;
-        return std::string_view(buf+i_start, i-i_start);
-       }
-
-    //-----------------------------------------------------------------------
-    [[nodiscard]] std::string_view collect_identifier() noexcept
-       {
-        const std::size_t i_start = i;
-        while( i<siz && (std::isalnum(buf[i]) || buf[i]=='_') ) ++i;
-        return std::string_view(buf+i_start, i-i_start);
-       }
-
-    //-----------------------------------------------------------------------
     void collect_define(DefineBuf& def)
        {// LABEL       0  // [INT] Descr
         // vnName     vn1782  // descr [unit]
+
         // Contract: '#define' already eat
+
         // [Label]
         skip_blanks();
         def.set_label( collect_identifier() );
@@ -371,8 +260,6 @@ class Parser
         //DBGLOG("    [*] Collected define: label=\"{}\" value=\"{}\" comment=\"{}\"\n", def.label(), def.value(), def.comment())
        }
 };
-
-#undef notify_error
 
 
 

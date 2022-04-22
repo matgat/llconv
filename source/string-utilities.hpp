@@ -229,7 +229,7 @@ std::string iso_latin1_to_utf8(const std::string_view ansi)
 // Natural sorting compare functor
 // std::map<std::string,std::string,NatSortLess> map;
 // std::sort(vector, NatSortLess cmp);
-//class NatSortLess
+//class NatSortLess final
 //{
 // public:
 //    bool operator()(const char* const a, const char* const b) const { return natcmp(a, b) < 0; }
@@ -320,7 +320,7 @@ std::string iso_latin1_to_utf8(const std::string_view ansi)
 
 /////////////////////////////////////////////////////////////////////////////
 // A compile time string
-//class static_string
+//class static_string final
 //{
 // public:
 //    template<std::size_t N> consteval static_string(const char(&a)[N]) : ptr(a), len(N-1) {}

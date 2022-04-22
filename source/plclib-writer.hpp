@@ -33,7 +33,7 @@ namespace plclib //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 /////////////////////////////////////////////////////////////////////////////
 // A class to hold schema version <major-ver>.<minor-ver>
-class Version
+class Version final
 {
  public:
     constexpr Version(const uint32_t v =0x00020008) noexcept : i_ver(v) {}

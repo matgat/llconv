@@ -1,8 +1,18 @@
 (*
-    descr: Libraries for strato machines (Macotec M-series machines)
-    version: 0.5.0
-    author: ©2017-2021 Matteo Gattanini
-    dependencies: Common.pll, defvar.pll, iomap.pll, messages.pll
+	name: test
+	descr: Libraries for strato machines (Macotec M-series machines)
+	version: 0.5.0
+	author: MG
+	dependencies: Common.pll, defvar.pll, iomap.pll, messages.pll
+
+	global-variables: 15
+	functions: 2
+	function blocks: 65
+	programs: 5
+	macros: 3
+	structs: 1
+	typedefs: 1
+	enums: 2
 *)
 
 
@@ -368,14 +378,14 @@ FUNCTION_BLOCK fbRoomFit
     given an ordinate array (Y₁,Y₂,... ), find the
     highest (lowest) y that fits the body in the
     ordinates array without colliding with them.
-         ▲
+         ▴
        y │             _ _ _ _ _ y (initial)
          │            ■==== Y₃
          │   _ rp ↕╔═╗ _ _ _ _ _ y (found)
          │     rm ↕╚═╝
          │            ■==== Y₂
          │            ■==== Y₁
-         ┼──────────────────────────────►
+         ┼──────────────────────────────▸
 *)
 dlog( Txt:='fbRoomFit: y=%ld room=%ld|%ld dwn:%d', Lvl:=5, Val1:=y/1E3, Val2:=rm/1E3, Val3:=rp/1E3, Val4:=TO_DINT(dwn) );
 (* Nota: l'ingombro del corpo è dato da (y+rm) e (y+rp) *)

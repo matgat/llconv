@@ -36,7 +36,7 @@ namespace fmtstr
 
 
 /////////////////////////////////////////////////////////////////////////////
-class error : public std::exception
+class error final : public std::exception
 {
  public:
     template<class ... Args> explicit error(const std::string_view txt, Args&&... args)
@@ -50,7 +50,7 @@ class error : public std::exception
 
 
 /////////////////////////////////////////////////////////////////////////////
-class parse_error : public std::exception
+class parse_error final : public std::exception
 {
  public:
     explicit parse_error(const std::string_view txt, const std::size_t l, const std::size_t i) noexcept
