@@ -71,6 +71,11 @@ class BasicParser
         //if(buf.find('\r') != buf.npos) throw std::runtime_error("Use unix EOL, remove CR (\\r) characters");
        }
 
+    //-----------------------------------------------------------------------
+    [[nodiscard]] bool end_not_reached() const noexcept { return i<siz; }
+    [[nodiscard]] std::size_t curr_line() const noexcept { return line; }
+    [[nodiscard]] std::size_t curr_pos() const noexcept { return i; }
+
 
  protected:
     //-----------------------------------------------------------------------
@@ -89,11 +94,13 @@ class BasicParser
         else issues.push_back( fmt::format("{} (line {}, offset {})"sv, fmt::format(__VA_ARGS__), line, i) );\
        }
 
+
     //-----------------------------------------------------------------------
     [[nodiscard]] static bool is_blank(const char c) noexcept
        {
         return std::isspace(c) && c!='\n';
        }
+
 
     //-----------------------------------------------------------------------
     // Skip space chars except new line
@@ -102,8 +109,9 @@ class BasicParser
         while( i<siz && is_blank(buf[i]) ) ++i;
        }
 
+
     //-----------------------------------------------------------------------
-    [[nodiscard]] bool eat_line_end() noexcept
+    [[maybe_unused]] bool eat_line_end() noexcept
        {
         assert(i<siz);
         if( buf[i]=='\n' )
@@ -115,8 +123,29 @@ class BasicParser
         return false;
        }
 
+
     //-----------------------------------------------------------------------
-    [[maybe_unusued]] std::string_view skip_line() noexcept
+    // Skip empty lines
+    void skip_empty_lines() noexcept
+       {
+        do{ skip_blanks(); }
+        while( eat_line_end() );
+       }
+
+
+    //-----------------------------------------------------------------------
+    void check_if_line_ended_after(const std::string_view fmt_str, const std::string_view fmt_arg)
+       {
+        skip_blanks();
+        if( !eat_line_end() )
+           {
+            notify_error("Unexpected content after {}: {}", fmt::format(fmt::runtime(fmt_str), fmt_arg), str::escape(skip_line()));
+           }
+       }
+
+
+    //-----------------------------------------------------------------------
+    [[maybe_unused]] std::string_view skip_line() noexcept
        {
         // Intercept the edge case already at buffer end:
         if(i>i_last) return std::string_view(buf+i_last, 0);
@@ -126,6 +155,7 @@ class BasicParser
         return std::string_view(buf+i_start, i-i_start);
         // Note: If '\n' not found is i==siz and returns what remains in buf
        }
+
 
     //-----------------------------------------------------------------------
     [[nodiscard]] bool eat(const std::string_view s) noexcept
@@ -139,6 +169,7 @@ class BasicParser
         return false;
        }
 
+
     //-----------------------------------------------------------------------
     [[nodiscard]] bool eat_token(const std::string_view s) noexcept
        {
@@ -151,6 +182,7 @@ class BasicParser
         return false;
        }
 
+
     //-----------------------------------------------------------------------
     [[nodiscard]] std::string_view collect_token() noexcept
        {
@@ -158,6 +190,7 @@ class BasicParser
         while( i<siz && !std::isspace(buf[i]) ) ++i;
         return std::string_view(buf+i_start, i-i_start);
        }
+
 
     //-----------------------------------------------------------------------
     [[nodiscard]] std::string_view collect_identifier() noexcept
@@ -167,6 +200,7 @@ class BasicParser
         return std::string_view(buf+i_start, i-i_start);
        }
 
+
     //-----------------------------------------------------------------------
     [[nodiscard]] std::string_view collect_numeric_value() noexcept
        {
@@ -174,6 +208,7 @@ class BasicParser
         while( i<siz && (std::isdigit(buf[i]) || buf[i]=='+' || buf[i]=='-' || buf[i]=='.' || buf[i]=='E') ) ++i;
         return std::string_view(buf+i_start, i-i_start);
        }
+
 
     //-----------------------------------------------------------------------
     [[nodiscard]] std::string_view collect_digits() noexcept
@@ -217,6 +252,7 @@ class BasicParser
         return result;
        }
 
+
     //-----------------------------------------------------------------------
     // Read a (base10) integer literal
     [[nodiscard]] int extract_integer()
@@ -256,6 +292,7 @@ class BasicParser
            }
         return sign * result;
        }
+
 
     //-----------------------------------------------------------------------
     // Read a (base10) floating point number literal
@@ -341,22 +378,6 @@ class BasicParser
     //    return result;
     //   }
 
-    //-----------------------------------------------------------------------
-    //[[nodiscard]] std::string_view collect_until_char_same_line(const char c)
-    //   {
-    //    const std::size_t i_start = i;
-    //    while( i<siz )
-    //       {
-    //        if( buf[i]==c )
-    //           {
-    //            //DBGLOG("    [*] Collected \"{}\" at line {}\n", std::string_view(buf+i_start, i-i_start), line)
-    //            return std::string_view(buf+i_start, i-i_start);
-    //           }
-    //        else if( buf[i]=='\n' ) break;
-    //        ++i;
-    //       }
-    //    throw fmtstr::error("Unclosed content (\'{}\' expected)", str::escape(c));
-    //   }
 
     //-----------------------------------------------------------------------
     //[[nodiscard]] std::string_view collect_until_char(const char c)
@@ -375,18 +396,37 @@ class BasicParser
     //    throw fmtstr::error("Unclosed content (\'{}\' expected)", str::escape(c));
     //   }
 
+
+    //-----------------------------------------------------------------------
+    //[[nodiscard]] std::string_view collect_until_char_same_line(const char c)
+    //   {
+    //    const std::size_t i_start = i;
+    //    while( i<siz )
+    //       {
+    //        if( buf[i]==c )
+    //           {
+    //            //DBGLOG("    [*] Collected \"{}\" at line {}\n", std::string_view(buf+i_start, i-i_start), line)
+    //            return std::string_view(buf+i_start, i-i_start);
+    //           }
+    //        else if( buf[i]=='\n' ) break;
+    //        ++i;
+    //       }
+    //    throw fmtstr::error("Unclosed content (\'{}\' expected)", str::escape(c));
+    //   }
+
+
     //-----------------------------------------------------------------------
     [[nodiscard]] std::string_view collect_until_char_trimmed(const char c)
        {
         const std::size_t line_start = line; // Store current line
         const std::size_t i_start = i;       // and position
-        std::size_t i_last_not_blank = i_start;
+        std::size_t i_end = i_start; // Index past last char not blank
         while( i<siz )
            {
             if( buf[i]==c )
                {
                 //++i; // Nah, do not eat c
-                return std::string_view(buf+i_start, i_last_not_blank-i_start);
+                return std::string_view(buf+i_start, i_end-i_start);
                }
             else if( buf[i]=='\n' )
                {
@@ -395,12 +435,13 @@ class BasicParser
                }
             else
                {
-                if( !is_blank(buf[i]) ) i_last_not_blank = i;
-                ++i;
+                if( !is_blank(buf[i]) ) i_end = ++i;
+                else ++i;
                }
            }
         throw fmtstr::parse_error(fmt::format("Unclosed content (\'{}\' expected)", str::escape(c)), line_start, i_start);
        }
+
 
     //-----------------------------------------------------------------------
     //[[nodiscard]] std::string_view collect_until_token(const std::string_view tok)
@@ -418,6 +459,7 @@ class BasicParser
     //       }
     //    throw fmtstr::parse_error(fmt::format("Unclosed content (\"{}\" expected)",tok), line_start, i_start);
     //   }
+
 
     //-----------------------------------------------------------------------
     [[nodiscard]] std::string_view collect_until_newline_token(const std::string_view tok)
@@ -441,10 +483,11 @@ class BasicParser
         throw fmtstr::parse_error(fmt::format("Unclosed content (\"{}\" expected)",tok), line_start, i_start);
        }
 
+
     //-----------------------------------------------------------------------
-    //[[nodiscard]] bool eat_directive_start() noexcept
+    //[[nodiscard]] bool eat_character(const char c) noexcept
     //   {
-    //    if( i<siz && buf[i]=='#' )
+    //    if( i<siz && buf[i]==c )
     //       {
     //        ++i;
     //        return true;
@@ -452,38 +495,29 @@ class BasicParser
     //    return false;
     //   }
 
+
     //-----------------------------------------------------------------------
-    //[[nodiscard]] bool eat_line_comment_start() noexcept
+    //[[nodiscard]] bool eat_characters(const char c1, const char c2) noexcept
     //   {
-    //    if( i<(siz-1) && buf[i]=='/' && buf[i+1]=='/' )
+    //    if( i<(siz-1) && buf[i]==c1 && buf[i+1]==c2 )
     //       {
-    //        i += 2; // Skip "//"
+    //        i += 2; // Skip them
     //        return true;
     //       }
     //    return false;
     //   }
 
-    //-----------------------------------------------------------------------
-    //[[nodiscard]] bool eat_block_comment_start() noexcept
-    //   {
-    //    if( i<(siz-1) && buf[i]=='/' && buf[i+1]=='*' )
-    //       {
-    //        i += 2; // Skip "/*"
-    //        return true;
-    //       }
-    //    return false;
-    //   }
 
     //-----------------------------------------------------------------------
-    //void skip_block_comment()
+    //void skip_until_characters(const char c1, const char c2)
     //   {
     //    const std::size_t line_start = line; // Store current line
     //    const std::size_t i_start = i; // Store current position
     //    while( i<i_last )
     //       {
-    //        if( buf[i]=='*' && buf[i+1]=='/' )
+    //        if( buf[i]==c1 && buf[i+1]==c2 )
     //           {
-    //            i += 2; // Skip "*/"
+    //            i += 2; // Skip them
     //            return;
     //           }
     //        else if( buf[i]=='\n' )
@@ -492,7 +526,7 @@ class BasicParser
     //           }
     //        ++i;
     //       }
-    //    throw fmtstr::parse_error("Unclosed block comment", line_start, i_start);
+    //    throw fmtstr::parse_error(fmt::format("Unclosed block (\"{}{}\" expected)",c1,c2), line_start, i_start);
     //   }
 };
 

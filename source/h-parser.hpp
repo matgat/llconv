@@ -33,7 +33,10 @@ namespace h //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 class DefineBuf final
 {
  public:
-    [[nodiscard]] operator bool() const noexcept { return !i_Value.empty(); }
+    [[nodiscard]] operator bool() const noexcept
+       {
+        return !i_Value.empty();
+       }
 
     [[nodiscard]] std::string_view label() const noexcept { return i_Label; }
     void set_label(const std::string_view s)
@@ -42,12 +45,17 @@ class DefineBuf final
         i_Label = s;
        }
 
-    [[nodiscard]] std::string_view value() const noexcept { return i_Value; }
+    [[nodiscard]] std::string_view value() const noexcept
+       {
+        return i_Value;
+       }
+
     void set_value(const std::string_view s)
        {
         if(s.empty()) throw std::runtime_error("Empty define value");
         i_Value = s;
        }
+
     [[nodiscard]] bool value_is_number() const noexcept
        {
         double result;
@@ -125,6 +133,7 @@ class Parser final : public BasicParser
 
 
  private:
+
     //-----------------------------------------------------------------------
     [[nodiscard]] bool eat_line_comment_start() noexcept
        {
@@ -136,6 +145,7 @@ class Parser final : public BasicParser
         return false;
        }
 
+
     //-----------------------------------------------------------------------
     [[nodiscard]] bool eat_block_comment_start() noexcept
        {
@@ -146,6 +156,7 @@ class Parser final : public BasicParser
            }
         return false;
        }
+
 
     //-----------------------------------------------------------------------
     void skip_block_comment()
@@ -168,6 +179,7 @@ class Parser final : public BasicParser
         throw fmtstr::parse_error("Unclosed block comment", line_start, i_start);
        }
 
+
     //-----------------------------------------------------------------------
     void collect_define(DefineBuf& def)
        {// LABEL       0  // [INT] Descr
@@ -189,72 +201,65 @@ class Parser final : public BasicParser
             const std::size_t i_start = i; // Start of overall comment string
 
             // Detect possible pre-declarator in square brackets like: // [xxx] comment
-            std::size_t i_pre_start = i; // Start of possible pre-declarator in square brackets
-            std::size_t i_pre_len = 0;
             if( i<siz && buf[i]=='[' )
                {
                 ++i; // Skip '['
                 skip_blanks();
-                i_pre_start = i;
-                std::size_t i_last_not_blank = i;
+                const std::size_t i_pre_start = i; // Start of pre-declaration
+                std::size_t i_pre_end = i; // One-past-end of pre-declaration
                 while( true )
                    {
                     if( i>=siz || buf[i]=='\n' )
                        {
                         notify_error("Unclosed initial \'[\' in the comment of define {}", def.label());
-                        def.set_comment( std::string_view(buf+i_start, i_last_not_blank-i_start) );
+                        def.set_comment( std::string_view(buf+i_start, i_pre_end-i_start) );
                         break;
                        }
                     else if( buf[i]==']' )
                        {
-                        i_pre_len = i_last_not_blank - i_pre_start + 1;
+                        def.set_comment_predecl( std::string_view(buf+i_pre_start, i_pre_end-i_pre_start) );
                         ++i; // Skip ']'
                         break;
                        }
                     else
                        {
-                        if( !is_blank(buf[i]) ) i_last_not_blank = i;
-                        ++i;
+                        if( !is_blank(buf[i]) ) i_pre_end = ++i;
+                        else ++i;
                        }
                    }
                 skip_blanks();
                }
-            if( i_pre_start<siz )
-               {
-                def.set_comment_predecl( std::string_view(buf+i_pre_start, i_pre_len) );
-               }
 
-            // Collect the actual comment text
+            // Collect the remaining comment text
             if( !def.has_comment() && i<siz && buf[i]!='\n' )
                {
-                const std::size_t i_txt_start = i;
-                std::size_t i_txt_len = 0;
-                std::size_t i_last_not_blank = i;
+                const std::size_t i_txt_start = i; // Start of comment text
+                std::size_t i_txt_end = i; // One-past-end of comment text
                 do {
                     if( buf[i]=='\n' )
                        {// Line finished
-                        i_txt_len = i_last_not_blank - i_txt_start + 1;
                         break;
                        }
                     else
                        {
-                        if( !is_blank(buf[i]) ) i_last_not_blank = i;
-                        ++i;
+                        if( !is_blank(buf[i]) ) i_txt_end = ++i;
+                        else ++i;
                        }
                    }
                 while( i<siz );
 
-                def.set_comment( std::string_view(buf+i_txt_start, i_txt_len) );
+                def.set_comment( std::string_view(buf+i_txt_start, i_txt_end-i_txt_start) );
                }
            }
-        else
+        //else if(fussy)
+        //   {
+        //    notify_error("Define {} hasn't a comment", def.label());
+        //   }
+
+        // Expecting a line end here
+        if( !eat_line_end() )
            {
-            //notify_error("Define {} hasn't a comment", def.label());
-            // Expecting a line end
-            if( !eat_line_end() )
-               {
-                notify_error("Unexpected content after define: {}", str::escape(skip_line()));
-               }
+            notify_error("Unexpected content after define: {}", str::escape(skip_line()));
            }
 
         //DBGLOG("    [*] Collected define: label=\"{}\" value=\"{}\" comment=\"{}\"\n", def.label(), def.value(), def.comment())

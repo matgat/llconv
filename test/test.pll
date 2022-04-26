@@ -318,7 +318,6 @@ SET_MSG(MSG_BOOTING,'MSG_BOOTING',0);
 (* -- Servizi vari -- *)
 vbRstSvcs := TRUE;
 
-
 (* -- Statistiche e controlli all'avvio --*)
 (* Informazioni sull'avvio *)
 vqBootsCount := vqBootsCount + 1; (* Contatore avvii *)

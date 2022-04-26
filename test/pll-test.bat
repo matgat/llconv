@@ -1,4 +1,8 @@
 @echo off
+rem -----------------------------------------------------------
+rem This will compare the generated file, useful when compiling
+rem with define PLL_TEST
+rem -----------------------------------------------------------
 set fname=test
 set out_dir=D:\HD\Desktop
 set wmerge="%ProgramFiles%\WinMerge\WinMergeU.exe" /e /u

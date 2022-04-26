@@ -34,40 +34,142 @@ class Parser final : public BasicParser
     Parser(const std::string_view b, std::vector<std::string>& sl, const bool f)
       : BasicParser(b,sl,f) {}
 
-    //[[nodiscard]] DefineBuf next_define()
-    //   {
-    //    DefineBuf def;
-    //
-    //    try{
-    //        while( i<siz )
-    //           {
-    //            skip_blanks();
-    //            if( eat_line_comment_start() )
-    //               {
-    //                skip_line();
-    //               }
-    //            else if( eat_block_comment_start() )
-    //               {
-    //                skip_block_comment();
-    //               }
-    //            else if( eat_line_end() )
-    //               {// An empty line
-    //               }
-    //            else if( eat_token("#define"sv) )
-    //               {
-    //                collect_define(def);
-    //                break;
-    //               }
-    //            else notify_error("Unexpected content: {}", str::escape(skip_line()));
-    //           }
-    //       }
-    //    catch(std::exception& e)
-    //       {
-    //        throw fmtstr::parse_error(e.what(), line, i);
-    //       }
-    //
-    //    return def;
-    //   }
+
+    //-----------------------------------------------------------------------
+    void check_heading_comment(plcb::Library& lib)
+       {
+        while( i<siz )
+           {
+            skip_blanks();
+            if( i>=siz )
+               {// No more data!
+                break;
+               }
+            else if( eat_line_end() )
+               {// Skip empty line
+                continue;
+               }
+            else if( eat_block_comment_start() )
+               {// Could be my custom header
+                //(*
+                //    name: test
+                //    descr: Libraries for strato machines (Macotec M-series machines)
+                //    version: 0.5.0
+                //    author: MG
+                //    dependencies: Common.pll, defvar.pll, iomap.pll, messages.pll
+                //*)
+                std::size_t j = i; // Where comment content starts
+                skip_block_comment();
+                const std::size_t j_end = i-2; // Where comment content ends
+                
+                // Parse heading comment
+                while( j < j_end )
+                   {
+                    // Get key
+                    while( j<j_end && is_blank(buf[j]) ) ++j; // Skip blanks
+                    std::size_t j_start = j;
+                    while( j<j_end && std::isalnum(buf[j]) ) ++j;
+                    const std::string_view key(buf+j_start, j-j_start);
+                    if( !key.empty() )
+                       {
+                        // Get separator
+                        while( j<j_end && is_blank(buf[j]) ) ++j; // Skip blanks
+                        if( buf[j]==':' )
+                           {// Get value
+                            ++j; // Skip ':'
+                            while( j<j_end && is_blank(buf[j]) ) ++j; // Skip blanks
+                            j_start = j;
+                            while( j<j_end && buf[j]!='\r' && buf[j]!='\n' ) ++j;
+                            const std::string_view val(buf+j_start, j-j_start);
+                            if( !val.empty() )
+                               {
+                                //DBGLOG("    Found key/value {}:{}\n", key, val)
+                                if(key.starts_with("descr"sv)) lib.set_descr(val);
+                                else if(key=="version"sv) lib.set_version(val);
+                               }
+                           }
+                       }
+                    while( j<j_end && buf[j]!='\n' ) ++j; // Ensure to skip this line
+                    ++j; // Skip '\n'
+                   }
+               }
+            else
+               {// Heading comment not found
+                break;
+               }
+           }
+       }
+
+
+    //-----------------------------------------------------------------------
+    void collect_next(plcb::Library& lib)
+       {
+        skip_blanks();
+        if( eat_line_end() )
+           {
+            return;
+           }
+        else if( eat_block_comment_start() )
+           {
+            skip_block_comment();
+           }
+        else if( eat_token("PROGRAM"sv) )
+           {
+            //DBGLOG("Found PROGRAM in line {}\n", line)
+            auto& prg = lib.programs().emplace_back();
+            collect_pou(prg, "PROGRAM"sv, "END_PROGRAM"sv);
+           }
+        else if( eat_token("FUNCTION_BLOCK"sv) )
+           {
+            //DBGLOG("Found FUNCTION_BLOCK in line {}\n", line)
+            auto& fb = lib.function_blocks().emplace_back();
+            collect_pou(fb, "FUNCTION_BLOCK"sv, "END_FUNCTION_BLOCK"sv);
+           }
+        else if( eat_token("FUNCTION"sv) )
+           {
+            //DBGLOG("Found FUNCTION in line {}\n", line)
+            auto& fn = lib.functions().emplace_back();
+            collect_pou(fn, "FUNCTION"sv, "END_FUNCTION"sv, true);
+           }
+        else if( eat_token("MACRO"sv) )
+           {
+            //DBGLOG("Found MACRO in line {}\n", line)
+            auto& macro = lib.macros().emplace_back();
+            collect_macro(macro);
+           }
+        else if( eat_token("TYPE"sv) )
+           {// struct/typdef/enum/subrange
+            //DBGLOG("Found TYPE in line {}\n", line)
+            collect_type(lib);
+           }
+        else if( eat_token("VAR_GLOBAL"sv) )
+           {
+            //DBGLOG("Found VAR_GLOBAL in line {}\n", line)
+            // Check if there's some additional attributes
+            skip_blanks();
+            if( eat_token("CONSTANT"sv) )
+               {
+                collect_global_vars( lib.global_constants().groups(), true );
+               }
+            else if( eat_token("RETAIN"sv) )
+               {
+                notify_error("RETAIN variables not supported");
+               }
+            else if( eat_line_end() )
+               {
+                collect_global_vars( lib.global_variables().groups() );
+               }
+            else
+               {
+                throw fmtstr::error("Unexpected content in VAR_GLOBAL declaration: {}", str::escape(skip_line()));
+               }
+           }
+        else
+           {
+            notify_error("Unexpected content: {}", str::escape(skip_line()));
+           }
+       }
+
 
  private:
 
@@ -176,31 +278,184 @@ class Parser final : public BasicParser
 
 
     //-----------------------------------------------------------------------
-    [[nodiscard]] plcb::Macro::Parameter collect_macro_parameter()
-       {//   WHAT; {DE:"Parameter description"}
-        plcb::Macro::Parameter par;
-        skip_blanks();
-        par.set_name( collect_identifier() );
-        skip_blanks();
-        if( i>=siz || buf[i]!=';' )
-           {
-            throw fmtstr::error("Missing \';\' after macro parameter");
-           }
-        ++i; // Skip ';'
+    void collect_rest_of_struct(plcb::Struct& strct)
+       {// <name> : STRUCT { DE:"struct descr" }
+        //    x : DINT; { DE:"member descr" }
+        //    y : DINT; { DE:"member descr" }
+        //END_STRUCT;
+        // Name already collected, "STRUCT" already skipped
+        // Possible description
         skip_blanks();
         if( eat_directive_start() )
            {
             const plcb::Directive dir = collect_directive();
-            if( dir.key() == "DE"sv ) par.set_descr( dir.value() );
-            else notify_error("Unexpected directive \"{}\" in macro parameter", dir.key());
+            if( dir.key() == "DE"sv ) strct.set_descr( dir.value() );
+            else notify_error("Unexpected directive \"{}\" in struct \"{}\"", dir.key(), strct.name());
            }
-        // Expecting a line end now
-        skip_blanks();
-        if( !eat_line_end() )
+
+        while( i<siz )
            {
-            notify_error("Unexpected content after macro parameter: {}", str::escape(skip_line()));
+            skip_empty_lines();
+            if( eat("END_STRUCT;"sv) )
+               {
+                break;
+               }
+            else if( eat_line_end() )
+               {// Nella lista membri ammetto righe vuote
+                continue;
+               }
+            else if( eat_block_comment_start() )
+               {// Nella lista membri ammetto righe di commento
+                skip_block_comment();
+                continue;
+               }
+
+            strct.members().push_back( collect_variable() );
+            // Some checks
+            //if( strct.members().back().has_value() )
+            //   {
+            //    throw fmtstr::error("Struct member \"{}\" cannot have a value ({})", strct.members().back().name(), strct.members().back().value());
+            //   }
+            if( strct.members().back().has_address() )
+               {
+                throw fmtstr::error("Struct member \"{}\" cannot have an address", strct.members().back().name());
+               }
            }
-        return par;
+
+        // Expecting a line end now
+        check_if_line_ended_after("struct {}"sv, strct.name());
+        //DBGLOG("    [*] Collected struct \"{}\", {} members\n", strct.name(), strct.members().size())
+       }
+
+
+    //-----------------------------------------------------------------------
+    [[nodiscard]] bool collect_enum_element(plcb::Enum::Element& elem)
+       {// VAL1 := 0, { DE:"elem descr" }
+        // [Name]
+        skip_empty_lines();
+        elem.set_name( collect_identifier() );
+
+        // [Value]
+        skip_blanks();
+        if( !eat(":="sv) )
+           {
+            throw fmtstr::error("Value not found in enum element \"{}\"", elem.name());
+           }
+        skip_blanks();
+        elem.set_value( collect_numeric_value() );
+        skip_blanks();
+
+        // Qui c'è una virgola se ci sono altri valori successivi
+        bool has_next = i<siz && buf[i]==',';
+        if( has_next ) ++i; // Skip comma
+
+        // [Description]
+        skip_blanks();
+        if( eat_directive_start() )
+           {
+            const plcb::Directive dir = collect_directive();
+            if( dir.key() == "DE"sv ) elem.set_descr( dir.value() );
+            else notify_error("Unexpected directive \"{}\" in enum element \"{}\"", dir.key(), elem.name());
+           }
+
+        // Expecting a line end now
+        check_if_line_ended_after("enum element {}"sv, elem.name());
+        //DBGLOG("    [*] Collected enum element: name=\"{}\" value=\"{}\" descr=\"{}\"\n", elem.name(), elem.value(), elem.descr())
+        return has_next;
+       }
+
+
+    //-----------------------------------------------------------------------
+    void collect_rest_of_enum(plcb::Enum& en)
+       {// <name>: ( { DE:"enum descr" }
+        //     VAL1 := 0, { DE:"elem descr" }
+        //     VAL2 := -1 { DE:"elem desc" }
+        // );
+        // Name already collected, ": (" already skipped
+        // Possible description
+        skip_blanks();
+        eat_line_end(); // Possibile interruzione di linea
+        skip_blanks();
+        if( eat_directive_start() )
+           {
+            const plcb::Directive dir = collect_directive();
+            if( dir.key() == "DE"sv ) en.set_descr( dir.value() );
+            else notify_error("Unexpected directive \"{}\" in enum \"{}\"", dir.key(), en.name());
+           }
+
+        // Elements
+        bool has_next;
+        do {
+            plcb::Enum::Element elem;
+            has_next = collect_enum_element(elem);
+            en.elements().push_back(elem);
+           }
+        while( has_next );
+
+        // End expected
+        skip_blanks();
+        if( !eat(");"sv) )
+           {
+            throw fmtstr::error("Expected termination \");\" after enum \"{}\"", en.name());
+           }
+
+        // Expecting a line end now
+        check_if_line_ended_after("enum {}"sv, en.name());
+        //DBGLOG("    [*] Collected enum \"{}\", {} elements\n", en.name(), en.elements().size())
+       }
+
+
+    //-----------------------------------------------------------------------
+    void collect_rest_of_subrange(plcb::Subrange& subr)
+       {// <name> : DINT (5..23); { DE:"descr" }
+        // Name already collected, ':' already skipped
+
+        // [Type]
+        skip_blanks();
+        subr.set_type(collect_identifier());
+
+        // [Min and Max]
+        skip_blanks();
+        if( i>=siz || buf[i]!='(' )
+           {
+            throw fmtstr::error("Expected \"(min..max)\" in subrange \"{}\"", subr.name());
+           }
+        ++i; // Skip '('
+        skip_blanks();
+        const auto min_val = extract_integer(); // extract_double(); // Nah, Floating point numbers seems not supported
+        skip_blanks();
+        if( !eat(".."sv) )
+           {
+            throw fmtstr::error("Expected \"..\" in subrange \"{}\"", subr.name());
+           }
+        skip_blanks();
+        const auto max_val = extract_integer();
+        skip_blanks();
+        if( i>=siz || buf[i]!=')' )
+           {
+            throw fmtstr::error("Expected \')\' in subrange \"{}\"", subr.name());
+           }
+        ++i; // Skip ')'
+        skip_blanks();
+        if( i>=siz || buf[i]!=';' )
+           {
+            throw fmtstr::error("Expected \';\' in subrange \"{}\"", subr.name());
+           }
+        ++i; // Skip ';'
+        subr.set_range(min_val, max_val);
+
+        // [Description]
+        skip_blanks();
+        if( eat_directive_start() )
+           {
+            const plcb::Directive dir = collect_directive();
+            if(dir.key() == "DE"sv) subr.set_descr(dir.value());
+            else notify_error("Unexpected directive \"{}\" in subrange \"{}\" declaration", dir.key(), subr.name());
+           }
+
+        // Expecting a line end now
+        check_if_line_ended_after("subrange {}"sv, subr.name());
+        //DBGLOG("    [*] Collected subrange: name=\"{}\" type=\"{}\" min=\"{}\" max=\"{}\" descr=\"{}\"\n", subr.name(), subr.type(), subr.min(), subr.max(), subr.descr())
        }
 
 
@@ -336,12 +591,12 @@ class Parser final : public BasicParser
 
             //var.set_value( collect_numeric_value() );
             const std::size_t i_start = i;
-            std::size_t i_last_not_blank = i_start;
+            std::size_t i_end = i_start; // Index past last char not blank
             while( i<siz )
                {
                 if( buf[i]==';' )
                    {
-                    var.set_value( std::string_view(buf+i_start, i_last_not_blank-i_start) );
+                    var.set_value( std::string_view(buf+i_start, i_end-i_start) );
                     //DBGLOG("    [*] Collected var value \"{}\"\n", var.name())
                     ++i; // Skip ';'
                     break;
@@ -356,8 +611,8 @@ class Parser final : public BasicParser
                    }
                 else
                    {// Collecting value
-                    if( !is_blank(buf[i]) ) i_last_not_blank = i;
-                    ++i;
+                    if( !is_blank(buf[i]) ) i_end = ++i;
+                    else ++i;
                    }
                }
            }
@@ -382,210 +637,8 @@ class Parser final : public BasicParser
            }
 
         // Expecting a line end now
-        skip_blanks();
-        if( !eat_line_end() )
-           {
-            notify_error("Unexpected content after variable \"{}\" declaration: {}", var.name(), str::escape(skip_line()));
-           }
+        check_if_line_ended_after("variable {} declaration"sv, var.name());
         //DBGLOG("    [*] Collected var: name=\"{}\" type=\"{}\" val=\"{}\" descr=\"{}\"\n", var.name(), var.type(), var.value(), var.descr())
-       }
-
-
-    //-----------------------------------------------------------------------
-    void collect_rest_of_struct(plcb::Struct& strct)
-       {// <name> : STRUCT { DE:"struct descr" }
-        //    x : DINT; { DE:"member descr" }
-        //    y : DINT; { DE:"member descr" }
-        //END_STRUCT;
-        // Name already collected, "STRUCT" already skipped
-        // Possible description
-        skip_blanks();
-        if( eat_directive_start() )
-           {
-            const plcb::Directive dir = collect_directive();
-            if( dir.key() == "DE"sv ) strct.set_descr( dir.value() );
-            else notify_error("Unexpected directive \"{}\" in struct \"{}\"", dir.key(), strct.name());
-           }
-
-        while( i<siz )
-           {
-            do{ skip_blanks(); } while( eat_line_end() ); // Skip empty lines
-            if( eat("END_STRUCT;"sv) )
-               {
-                break;
-               }
-            else if( eat_line_end() )
-               {// Nella lista membri ammetto righe vuote
-                continue;
-               }
-            else if( eat_block_comment_start() )
-               {// Nella lista membri ammetto righe di commento
-                skip_block_comment();
-                continue;
-               }
-
-            strct.members().push_back( collect_variable() );
-            // Some checks
-            //if( strct.members().back().has_value() )
-            //   {
-            //    throw fmtstr::error("Struct member \"{}\" cannot have a value ({})", strct.members().back().name(), strct.members().back().value());
-            //   }
-            if( strct.members().back().has_address() )
-               {
-                throw fmtstr::error("Struct member \"{}\" cannot have an address", strct.members().back().name());
-               }
-           }
-
-        // Expecting a line end now
-        skip_blanks();
-        if( !eat_line_end() )
-           {
-            notify_error("Unexpected content after struct \"{}\": {}", strct.name(), str::escape(skip_line()));
-           }
-        //DBGLOG("    [*] Collected struct \"{}\", {} members\n", strct.name(), strct.members().size())
-       }
-
-
-    //-----------------------------------------------------------------------
-    [[nodiscard]] bool collect_enum_element(plcb::Enum::Element& elem)
-       {// VAL1 := 0, { DE:"elem descr" }
-        // [Name]
-        do{ skip_blanks(); } while( eat_line_end() ); // Skip empty lines
-        elem.set_name( collect_identifier() );
-
-        // [Value]
-        skip_blanks();
-        if( !eat(":="sv) )
-           {
-            throw fmtstr::error("Value not found in enum element \"{}\"", elem.name());
-           }
-        skip_blanks();
-        elem.set_value( collect_numeric_value() );
-        skip_blanks();
-
-        // Qui c'è una virgola se ci sono altri valori successivi
-        bool has_next = i<siz && buf[i]==',';
-        if( has_next ) ++i; // Skip comma
-
-        // [Description]
-        skip_blanks();
-        if( eat_directive_start() )
-           {
-            const plcb::Directive dir = collect_directive();
-            if( dir.key() == "DE"sv ) elem.set_descr( dir.value() );
-            else notify_error("Unexpected directive \"{}\" in enum element \"{}\"", dir.key(), elem.name());
-           }
-
-        // Expecting a line end now
-        skip_blanks();
-        if( !eat_line_end() )
-           {
-            notify_error("Unexpected content after enum element \"{}\": {}", elem.name(), str::escape(skip_line()));
-           }
-        //DBGLOG("    [*] Collected enum element: name=\"{}\" value=\"{}\" descr=\"{}\"\n", elem.name(), elem.value(), elem.descr())
-        return has_next;
-       }
-
-
-    //-----------------------------------------------------------------------
-    void collect_rest_of_enum(plcb::Enum& en)
-       {// <name>: ( { DE:"enum descr" }
-        //     VAL1 := 0, { DE:"elem descr" }
-        //     VAL2 := -1 { DE:"elem desc" }
-        // );
-        // Name already collected, ": (" already skipped
-        // Possible description
-        skip_blanks();
-        eat_line_end(); // Possibile interruzione di linea
-        skip_blanks();
-        if( eat_directive_start() )
-           {
-            const plcb::Directive dir = collect_directive();
-            if( dir.key() == "DE"sv ) en.set_descr( dir.value() );
-            else notify_error("Unexpected directive \"{}\" in enum \"{}\"", dir.key(), en.name());
-           }
-
-        // Elements
-        bool has_next;
-        do {
-            plcb::Enum::Element elem;
-            has_next = collect_enum_element(elem);
-            en.elements().push_back(elem);
-           }
-        while( has_next );
-
-        // End expected
-        skip_blanks();
-        if( !eat(");"sv) )
-           {
-            throw fmtstr::error("Expected termination \");\" after enum \"{}\"", en.name());
-           }
-
-        // Expecting a line end now
-        skip_blanks();
-        if( !eat_line_end() )
-           {
-            notify_error("Unexpected content after enum \"{}\": {}", en.name(), str::escape(skip_line()));
-           }
-        //DBGLOG("    [*] Collected enum \"{}\", {} elements\n", en.name(), en.elements().size())
-       }
-
-
-    //-----------------------------------------------------------------------
-    void collect_rest_of_subrange(plcb::Subrange& subr)
-       {// <name> : DINT (5..23); { DE:"descr" }
-        // Name already collected, ':' already skipped
-
-        // [Type]
-        skip_blanks();
-        subr.set_type(collect_identifier());
-
-        // [Min and Max]
-        skip_blanks();
-        if( i>=siz || buf[i]!='(' )
-           {
-            throw fmtstr::error("Expected \"(min..max)\" in subrange \"{}\"", subr.name());
-           }
-        ++i; // Skip '('
-        skip_blanks();
-        const auto min_val = extract_integer(); // extract_double(); // Nah, Floating point numbers seems not supported
-        skip_blanks();
-        if( !eat(".."sv) )
-           {
-            throw fmtstr::error("Expected \"..\" in subrange \"{}\"", subr.name());
-           }
-        skip_blanks();
-        const auto max_val = extract_integer();
-        skip_blanks();
-        if( i>=siz || buf[i]!=')' )
-           {
-            throw fmtstr::error("Expected \')\' in subrange \"{}\"", subr.name());
-           }
-        ++i; // Skip ')'
-        skip_blanks();
-        if( i>=siz || buf[i]!=';' )
-           {
-            throw fmtstr::error("Expected \';\' in subrange \"{}\"", subr.name());
-           }
-        ++i; // Skip ';'
-        subr.set_range(min_val, max_val);
-
-        // [Description]
-        skip_blanks();
-        if( eat_directive_start() )
-           {
-            const plcb::Directive dir = collect_directive();
-            if(dir.key() == "DE"sv) subr.set_descr(dir.value());
-            else notify_error("Unexpected directive \"{}\" in subrange \"{}\" declaration", dir.key(), subr.name());
-           }
-
-        // Expecting a line end now
-        skip_blanks();
-        if(!eat_line_end())
-           {
-            notify_error("Unexpected content after subrange \"{}\" declaration: {}", subr.name(), str::escape(skip_line()));
-           }
-        //DBGLOG("    [*] Collected subrange: name=\"{}\" type=\"{}\" min=\"{}\" max=\"{}\" descr=\"{}\"\n", subr.name(), subr.type(), subr.min(), subr.max(), subr.descr())
        }
 
 
@@ -598,6 +651,10 @@ class Parser final : public BasicParser
             if( eat_token("END_VAR"sv) )
                {
                 break;
+               }
+            else if( eat_line_end() )
+               {// Sono ammesse righe vuote
+                continue;
                }
             else if( eat_block_comment_start() )
                {// Nella lista variabili sono ammesse righe di commento
@@ -657,18 +714,22 @@ class Parser final : public BasicParser
                    }
                 else if( eat_token("VAR_INPUT"sv) )
                    {
+                    check_if_line_ended_after("VAR_INPUT of {}"sv, pou.name());
                     collect_var_block( pou.input_vars() );
                    }
                 else if( eat_token("VAR_OUTPUT"sv) )
                    {
+                    check_if_line_ended_after("VAR_OUTPUT of {}"sv, pou.name());
                     collect_var_block( pou.output_vars() );
                    }
                 else if( eat_token("VAR_IN_OUT"sv) )
                    {
+                    check_if_line_ended_after("VAR_IN_OUT of {}"sv, pou.name());
                     collect_var_block( pou.inout_vars() );
                    }
                 else if( eat_token("VAR_EXTERNAL"sv) )
                    {
+                    check_if_line_ended_after("VAR_EXTERNAL of {}"sv, pou.name());
                     collect_var_block( pou.external_vars() );
                    }
                 else if( eat_token("VAR"sv) )
@@ -677,21 +738,26 @@ class Parser final : public BasicParser
                     skip_blanks();
                     if( eat_token("CONSTANT"sv) )
                        {
+                        check_if_line_ended_after("VAR CONSTANT of {}"sv, pou.name());
                         collect_var_block( pou.local_constants(), true );
                        }
+                    //else if( eat_token("RETAIN"sv) )
+                    //   {
+                    //    notify_error("RETAIN variables not supported");
+                    //   }
                     else if( eat_line_end() )
                        {
                         collect_var_block( pou.local_vars() );
                        }
                     else
                        {
-                        throw fmtstr::error("Unexpected content in header of {} {}: {}", start_tag, pou.name(), str::escape(skip_line()));
+                        throw fmtstr::error("Unexpected content after VAR of {} {}: {}", start_tag, pou.name(), str::escape(skip_line()));
                        }
                    }
                 else if( eat_token(end_tag) )
                    {
                     notify_error("Truncated {} {}", start_tag, pou.name());
-                    status = STS::SEE;
+                    break;
                    }
                 else
                    {
@@ -767,14 +833,45 @@ class Parser final : public BasicParser
 
 
     //-----------------------------------------------------------------------
-    void collect_macro_parameters(std::vector<plcb::Parameter>& pars)
+    [[nodiscard]] plcb::Macro::Parameter collect_macro_parameter()
+       {//   WHAT; {DE:"Parameter description"}
+        plcb::Macro::Parameter par;
+        skip_blanks();
+        par.set_name( collect_identifier() );
+        skip_blanks();
+        if( i>=siz || buf[i]!=';' )
+           {
+            throw fmtstr::error("Missing \';\' after macro parameter");
+           }
+        ++i; // Skip ';'
+        skip_blanks();
+        if( eat_directive_start() )
+           {
+            const plcb::Directive dir = collect_directive();
+            if( dir.key() == "DE"sv ) par.set_descr( dir.value() );
+            else notify_error("Unexpected directive \"{}\" in macro parameter", dir.key());
+           }
+
+        // Expecting a line end now
+        check_if_line_ended_after("macro parameter {}"sv, par.name());
+
+        return par;
+       }
+
+
+    //-----------------------------------------------------------------------
+    void collect_macro_parameters(std::vector<plcb::Macro::Parameter>& pars)
        {
         while( i<siz )
            {
             skip_blanks();
             if( eat_token("END_PAR"sv) )
                {
-                substatus = SUB::GET_HEADER;
+                break;
+               }
+            else if( eat_line_end() )
+               {// Sono ammesse righe vuote
+                continue;
                }
             else if( eat_block_comment_start() )
                {// Ammetto righe di commento?
@@ -820,9 +917,9 @@ class Parser final : public BasicParser
                         //DBGLOG("    Macro description: {}\n", dir.value())
                        }
                     else if( dir.key() == "CODE"sv )
-                       {
+                       {// Header finished
                         macro.set_code_type( dir.value() );
-                        substatus = SUB::GET_BODY;
+                        break;
                        }
                     else
                        {
@@ -835,12 +932,13 @@ class Parser final : public BasicParser
                        {
                         notify_error("Multiple groups of macro parameters");
                        }
-                    collect_macro_parameters();
+                    check_if_line_ended_after("PAR_MACRO of {}"sv, macro.name());
+                    collect_macro_parameters( macro.parameters() );
                    }
                 else if( eat_token("END_MACRO"sv) )
                    {
                     notify_error("Truncated macro");
-                    status = STS::SEE;
+                    break;
                    }
                 else
                    {
@@ -887,7 +985,7 @@ class Parser final : public BasicParser
 
 
     //-----------------------------------------------------------------------
-    void collect_global_vars(plcb::Variables_Groups& vgroups, const bool value_needed =false)
+    void collect_global_vars(std::vector<plcb::Variables_Group>& vgroups, const bool value_needed =false)
        {
         //    VAR_GLOBAL
         //    {G:"System"}
@@ -929,7 +1027,7 @@ class Parser final : public BasicParser
             else if( eat_token("END_VAR"sv) )
                {
                 //DBGLOG("    Global vars end at line {}\n", line)
-                break
+                break;
                }
             else
                {
@@ -947,7 +1045,7 @@ class Parser final : public BasicParser
 
 
     //-----------------------------------------------------------------------
-    void collect_type(plcb::xxx& xxx)
+    void collect_type(plcb::Library& lib)
        {
         //    TYPE
         //    str_name : STRUCT { DE:"descr" } member : DINT; { DE:"member descr" } ... END_STRUCT;
@@ -968,7 +1066,7 @@ class Parser final : public BasicParser
                }
             else if( eat_token("END_TYPE"sv) )
                {
-                status = STS::SEE;
+                break;
                }
             else
                {// Expected a type name token here
@@ -992,7 +1090,7 @@ class Parser final : public BasicParser
                     skip_blanks();
                     if(i>=siz) continue;
                     if( eat_token("STRUCT"sv) )
-                       {// Struct: <name> : STRUCT
+                       {// <name> : STRUCT
                         plcb::Struct strct;
                         strct.set_name(type_name);
                         collect_rest_of_struct( strct );
@@ -1000,7 +1098,7 @@ class Parser final : public BasicParser
                         lib.structs().push_back( std::move(strct) );
                        }
                     else if( buf[i]=='(' )
-                       {// Enum: <name>: (...
+                       {// <name>: ( { DE:"an enum" }
                         ++i; // Skip '('
                         plcb::Enum en;
                         en.set_name(type_name);
@@ -1010,18 +1108,19 @@ class Parser final : public BasicParser
                        }
                     else
                        {// Could be a typedef or a subrange
-                        // Unfortunately I have to peek to see which is
+                        // I have to peek to see which one
                         std::size_t j = i;
                         while(j<siz && buf[j]!=';' && buf[j]!='(' && buf[j]!='{' && buf[j]!='\n' ) ++j;
                         if(j<siz && buf[j]=='(' )
-                           {// Subrange: <name> : <type> (<min>..<max>); { DE:"descr" }
+                           {// <name> : <type> (<min>..<max>); { DE:"a subrange" }
                             plcb::Subrange subr;
                             subr.set_name(type_name);
                             collect_rest_of_subrange(subr);
+                            //DBGLOG("    subrange {}: {}\n", var.name(), var.type())
                             lib.subranges().push_back( std::move(subr) );
                            }
                         else
-                           {// Typedef: <name> : <type>; { DE:"descr" }
+                           {// <name> : <type>; { DE:"a typedef" }
                             plcb::Variable var;
                             var.set_name(type_name);
                             collect_rest_of_variable( var );
@@ -1031,139 +1130,6 @@ class Parser final : public BasicParser
                        }
                    }
                }
-           }
-       }
-
-
-    //-----------------------------------------------------------------------
-    void check_heading_comment(plcb::Library& lib)
-       {
-        while( i<siz )
-           {
-            skip_blanks();
-            if( i>=siz )
-               {// No more data!
-                break;
-               }
-            else if( eat_line_end() )
-               {// Skip empty line
-                continue;
-               }
-            else if( eat_block_comment_start() )
-               {// Could be my custom header
-                //(*
-                //    name: test
-                //    descr: Libraries for strato machines (Macotec M-series machines)
-                //    version: 0.5.0
-                //    author: MG
-                //    dependencies: Common.pll, defvar.pll, iomap.pll, messages.pll
-                //*)
-                std::size_t j = i; // Where comment content starts
-                skip_block_comment();
-                const std::size_t j_end = i-2; // Where comment content ends
-                // Check line by line
-                while( j < j_end )
-                   {
-                    // Get key
-                    while( j<j_end && is_blank(buf[j]) ) ++j; // Skip blanks
-                    std::size_t j_start = j;
-                    while( j<j_end && std::isalnum(buf[j]) ) ++j;
-                    const std::string_view key(buf.data()+j_start, j-j_start);
-                    if( !key.empty() )
-                       {
-                        // Get separator
-                        while( j<j_end && is_blank(buf[j]) ) ++j; // Skip blanks
-                        if( buf[j]==':' )
-                           {// Get value
-                            ++j; // Skip ':'
-                            while( j<j_end && is_blank(buf[j]) ) ++j; // Skip blanks
-                            j_start = j;
-                            while( j<j_end && buf[j]!='\r' && buf[j]!='\n' ) ++j;
-                            const std::string_view val(buf.data()+j_start, j-j_start);
-                            if( !val.empty() )
-                               {
-                                //DBGLOG("    Found key/value {}:{}\n", key, val)
-                                if(key.starts_with("descr"sv)) lib.set_descr(val);
-                                else if(key=="version"sv) lib.set_version(val);
-                               }
-                           }
-                       }
-                    while( j<j_end && buf[j]!='\n' ) ++j; // Ensure to skip this line
-                    ++j; // Skip '\n'
-                   }
-               }
-            else
-               {// Heading comment not found
-                break;
-               }
-           }
-       }
-
-
-    //-----------------------------------------------------------------------
-    void collect_next(plcb::Library& lib)
-       {
-        skip_blanks();
-        if( i>=siz )
-           {
-            continue;
-           }
-        else if( eat_block_comment_start() )
-           {
-            skip_block_comment();
-           }
-        else if( eat_line_end() )
-           {
-            continue;
-           }
-        else if( eat_token("PROGRAM"sv) )
-           {
-            auto& prg = lib.programs().emplace_back();
-            collect_pou(prg, "PROGRAM"sv, "END_PROGRAM"sv);
-           }
-        else if( eat_token("FUNCTION_BLOCK"sv) )
-           {
-            auto& fb = lib.function_blocks().emplace_back();
-            collect_pou(fb, "FUNCTION_BLOCK"sv, "END_FUNCTION_BLOCK"sv);
-           }
-        else if( eat_token("FUNCTION"sv) )
-           {
-            auto& fn = lib.functions().emplace_back();
-            collect_pou(fn, "FUNCTION"sv, "END_FUNCTION"sv, true);
-           }
-        else if( eat_token("MACRO"sv) )
-           {
-            //DBGLOG("Found MACRO in line {}\n", line)
-            auto& macro = lib.macros().emplace_back();
-            collect_macro(macro);
-           }
-        else if( eat_token("TYPE"sv) )
-           {// struct/typdef/enum/subrange
-            //DBGLOG("Found type decl in line {}\n", line)
-            skip_blanks();
-            status = STS::TYPE;
-           }
-        else if( eat_token("VAR_GLOBAL"sv) )
-           {
-            //DBGLOG("Found global vars in line {}\n", line)
-            // Check if there's some additional attributes
-            skip_blanks();
-            if( eat_token("CONSTANT"sv) )
-               {
-                collect_global_vars( lib.global_constants(), true );
-               }
-            else if( eat_line_end() )
-               {
-                collect_global_vars( lib.global_variables() );
-               }
-            else
-               {
-                throw fmtstr::error("Unexpected content in global variables declaration: {}", str::escape(skip_line()));
-               }
-           }
-        else
-           {
-            notify_error("Unexpected content: {}", str::escape(skip_line()));
            }
        }
 };
@@ -1178,7 +1144,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
 
     try{
         parser.check_heading_comment(lib);
-        while( i<siz )
+        while( parser.end_not_reached() )
            {
             //EVTLOG("main loop: offset:{} char:{}", i, buf[i])
             parser.collect_next(lib);
@@ -1190,7 +1156,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
        }
     catch(std::exception& e)
        {
-        throw fmtstr::parse_error(e.what(), line, i);
+        throw fmtstr::parse_error(e.what(), parser.curr_line(), parser.curr_pos());
        }
 }
 
