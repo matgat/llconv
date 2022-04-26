@@ -119,7 +119,7 @@ class Parser final : public BasicParser
                    }
                }
            }
-        catch(fmtstr::parse_error)
+        catch(fmtstr::parse_error&)
            {
             throw;
            }
