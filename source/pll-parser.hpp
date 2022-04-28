@@ -61,7 +61,7 @@ class Parser final : public BasicParser
                 std::size_t j = i; // Where comment content starts
                 skip_block_comment();
                 const std::size_t j_end = i-2; // Where comment content ends
-                
+
                 // Parse heading comment
                 while( j < j_end )
                    {
@@ -1150,7 +1150,7 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             parser.collect_next(lib);
            }
        }
-    catch(fmtstr::parse_error)
+    catch(fmtstr::parse_error&)
        {
         throw;
        }
