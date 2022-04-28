@@ -327,7 +327,7 @@ class MemoryMappedFile final
         // obtain file size
         struct stat sbuf {};
         if(fstat(fd, &sbuf) == -1) throw std::logic_error("Cannot stat file size");
-        i_bufsiz = sbuf.st_size;
+        i_bufsiz = static_cast<std::size_t>(sbuf.st_size);
 
         i_buf = static_cast<const char*>(mmap(nullptr, i_bufsiz, PROT_READ, MAP_PRIVATE, fd, 0U));
         if(i_buf == MAP_FAILED)

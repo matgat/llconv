@@ -253,7 +253,7 @@ class Parser final : public BasicParser
                    {
                     throw fmtstr::error("Unclosed directive {} value (\'\"\' expected)", dir.key());
                    }
-                else if( buf[i]=='<' || buf[i]=='>' || buf[i]=='\"' )
+                else if( buf[i]=='<' || buf[i]=='>' )
                    {
                     throw fmtstr::error("Invalid character \'{}\' in directive {} value", buf[i], dir.key());
                    }
