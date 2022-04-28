@@ -5,11 +5,13 @@
 
     DEPENDENCIES:
     --------------------------------------------- */
+#include <cassert> // assert
 #include <cctype> // std::isdigit, std::tolower, ...
 #include <string>
 #include <string_view>
 #include <charconv> // std::from_chars
 #include <optional> // std::optional
+
 #include <fmt/core.h> // fmt::format
 
 using namespace std::literals; // "..."sv
@@ -19,6 +21,22 @@ using namespace std::literals; // "..."sv
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 namespace str //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 {
+
+//---------------------------------------------------------------------------
+bool contains_wildcards(const std::string& s) noexcept
+{
+    //return std::regex_search(s, std::regex("*?")); // Seems slow
+    //return s.rfind('*') != std::string::npos || s.rfind('?') != std::string::npos;
+    // Two loops? I'd rather loop once
+    auto i = s.length();
+    while( i>0 )
+       {
+        const char c = s[--i];
+        if( c=='*' || c=='?' ) return true;
+       }
+    return false;
+}
+
 
 //---------------------------------------------------------------------------
 std::string replace_extension( const std::string& pth, std::string_view newext ) noexcept
@@ -149,38 +167,39 @@ std::size_t hash(const std::string_view s)
 
 //-----------------------------------------------------------------------
 // Returns true if text matches glob-like pattern with wildcards (*, ?)
-//bool glob_match(const char* text, const char* glob, const char dont_match ='/')
-//{
-//    // 'dont_match': character not matched by any wildcards
-//    const char *text_backup = nullptr;
-//    const char *glob_backup = nullptr;
-//    while( *text!='\0' )
-//       {
-//        if( *glob=='*' )
-//           {// new '*'-loop: backup positions in pattern and text
-//            text_backup = text;
-//            glob_backup = ++glob;
-//           }
-//        else if( *glob==*text || (*glob=='?' && *text!=dont_match) )
-//           {// Character matched
-//            ++text;
-//            ++glob;
-//           }
-//        else if( !glob_backup || (text_backup && *text_backup==dont_match) )
-//           {// No match
-//            return false;
-//           }
-//        else
-//           {// '*'-loop: backtrack after the last '*'
-//            if(text_backup) text = ++text_backup;
-//            glob = glob_backup;
-//           }
-//       }
-//    // Ignore trailing stars
-//    while(*glob=='*') ++glob;
-//    // At end of text means success if nothing else is left to match
-//    return *glob=='\0';
-//}
+bool glob_match(const char* text, const char* glob, const char dont_match ='/')
+{
+    // 'dont_match': character not matched by any wildcards
+    const char *text_backup = nullptr;
+    const char *glob_backup = nullptr;
+    while( *text!='\0' )
+       {
+        if( *glob=='*' )
+           {// new '*'-loop: backup positions in pattern and text
+            text_backup = text;
+            glob_backup = ++glob;
+           }
+        else if( *glob==*text || (*glob=='?' && *text!=dont_match) )
+           {// Character matched
+            ++text;
+            ++glob;
+           }
+        else if( !glob_backup || (text_backup && *text_backup==dont_match) )
+           {// No match
+            return false;
+           }
+        else
+           {// '*'-loop: backtrack after the last '*'
+            assert(glob_backup!=nullptr);
+            if(text_backup) text = ++text_backup;
+            glob = glob_backup;
+           }
+       }
+    // Ignore trailing stars
+    while(*glob=='*') ++glob;
+    // At end of text means success if nothing else is left to match
+    return *glob=='\0';
+}
 
 
 //---------------------------------------------------------------------------

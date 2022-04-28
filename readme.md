@@ -13,15 +13,19 @@ The supported transformations are:
 * `.h` → `.pll`, `.plclib`
 * `.pll` → `.plclib`
 
+It's pretty fast: in my case it takes less than 0.08 s to parse
+13 files (2.8 MB) and generate 15 converted files (3.5 MB).
+
 
 _________________________________________________________________________
 ## Limitations
 This tool aims to be very fast and efficient:
-the raw content of the input is directly written on the output.
-This behavior introduces some limitations on the input files.
-To avoid dynamic allocations, the input is unchanged.
-There are no attempts to fix invalid characters, or to support
-different encodings and line breaks.
+the raw content of the input is directly written on the output,
+minimizing dynamic memory allocations.
+So the input is unchanged: no attempts to fix invalid characters
+or to support different encodings and line breaks.
+This behavior has a price and introduces some limitations on the
+accepted input files.
 
 A couple of draconian choices have been made:
 
@@ -31,7 +35,7 @@ A couple of draconian choices have been made:
               character size have only disadvantages:
               much more size (text mostly `ASCII`),
               slower parsing (endianness),
-              generally less compatible with external tools_
+              less compatibility with external tools_
 
 * Support just _unix_ line breaks (`LF`, `\n`)\
   _Rationale: There's really no point for two-chars lines breaks
@@ -47,8 +51,12 @@ Input files must:
 
 ### _IEC 61131-3_ syntax
 * Parser is case sensitive (uppercase keywords)
-* Multidimensional arrays like `ARRAY[1..2, 1..2]` are not supported
-* `Interface` blocks are not supported
+* Not supported:
+  * Multidimensional arrays like `ARRAY[1..2, 1..2]`
+  * `RETAIN` specifier
+  * Pointers
+  * `IFDEF` LogicLab extension
+  * Latest standard (`INTERFACE`, `THIS`, `PUBLIC`, `IMPLEMENTS`, `METHOD`, …) 
 
 
 _________________________________________________________________________
@@ -83,7 +91,7 @@ The recognized types are:
 |   `SINT`    | *Short INTeger*             |  1   | -128 … 127                |
 |   `INT`     | *INTeger*                   |  2   | -32768 … 32767            |
 |   `DINT`    | *Double INTeger*            |  4   |  -2147483648 … 2147483647 |
-| ~~`LINT`~~  | ~~*Long INTeger*~~          |  8   | -2⁶³ … 2⁶³-1          |
+| ~~`LINT`~~  | ~~*Long INTeger*~~          |  8   | -2⁶³ … 2⁶³-1              |
 |   `USINT`   | *Unsigned Short INTeger*    |  1   | 0 … 255                   |
 |   `UINT`    | *Unsigned INTeger*          |  2   | 0 … 65535                 |
 |   `UDINT`   | *Unsigned Double INTeger*   |  4   | 0 … 4294967295            |

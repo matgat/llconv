@@ -27,7 +27,7 @@
 
 using namespace std::literals; // "..."sv
 
-//#define PLL_TEST
+//#define PLL_TEST // Check *.pll parser and writer
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -38,7 +38,7 @@ class Arguments final
        {
         //std::vector<std::string> args(argv+1, argv+argc); for( std::string& arg : args )
         // Expecting pll file paths
-        i_files.reserve( static_cast<std::size_t>(argc));
+        i_files.reserve( static_cast<std::size_t>(argc) );
         try{
             enum class STS
                {
@@ -91,7 +91,10 @@ class Arguments final
                         else
                            {// Probably an input file
                             //i_files.emplace_back(arg);
-                            const auto in_paths = sys::file_glob(arg);
+                            // Support environment variables? Nah, not very useful, they're already been expanded
+                            //const fs::path path = sys::expand_env_variables( std::string(arg) );
+                            // Support globbing (just in file name)
+                            const auto in_paths = sys::file_glob( fs::path(arg) );
                             if( in_paths.empty() )
                                {
                                 throw std::invalid_argument(fmt::format("File(s) not found: {}",arg));
@@ -237,40 +240,34 @@ template<typename F> void parse_buffer(F parsefunct, const std::string_view buf,
 
 //---------------------------------------------------------------------------
 // Write PLC library to plclib format
-[[maybe_unused]] inline fs::path write_plclib(const plcb::Library& lib, const std::string& in_base_name, const Arguments& args)
+void write_plclib(const plcb::Library& lib, const std::string& pth, const Arguments& args)
 {
     //if( args.output_isdir() )
-    //   {// Create a 'plclib' file in the output directory
-        const fs::path opth{ args.output() / fmt::format("{}.plclib", in_base_name) };
-        const std::string out_path{ opth.string() };
-        if(args.verbose()) std::cout << "    " "Writing to: "  << out_path << '\n';
-        sys::file_write out_file_write( out_path );
+    //   {
+        if(args.verbose()) std::cout << "    " "Writing to: "  << pth << '\n';
+        sys::file_write out_file_write(pth);
         plclib::write(out_file_write, lib, args.options());
     //   }
     //else
     //   {// Combine in a single 'plcprj' file
     //    throw std::runtime_error(fmt::format("Combine into existing plcprj file {} not yet supported", args.output().string()));
     //   }
-    return opth;
 }
 
 //---------------------------------------------------------------------------
 // Write PLC library to pll format
-[[maybe_unused]] inline fs::path write_pll(const plcb::Library& lib, const std::string& in_base_name, const Arguments& args)
+void write_pll(const plcb::Library& lib, const std::string& pth, const Arguments& args)
 {
     //if( args.output_isdir() )
-    //   {// Create a 'plclib' file in the output directory
-        const fs::path opth{ args.output() / fmt::format("{}.pll", in_base_name) };
-        const std::string out_path{ opth.string() };
-        if(args.verbose()) std::cout << "    " "Writing to: "  << out_path << '\n';
-        sys::file_write out_file_write( out_path );
+    //   {
+        if(args.verbose()) std::cout << "    " "Writing to: "  << pth << '\n';
+        sys::file_write out_file_write(pth);
         pll::write(out_file_write, lib, args.options());
     //   }
     //else
     //   {// Combine in a single 'pll' file
     //    throw std::runtime_error(fmt::format("Combine into existing pll file {} not yet supported", args.output().string()));
     //   }
-    return opth;
 }
 
 
@@ -281,15 +278,16 @@ template<typename F> void parse_buffer(F parsefunct, const std::string_view buf,
 void test_pll(const std::string& fbasename, const plcb::Library& lib, const Arguments& args, std::vector<std::string>& issues)
 {
     // Riscrivo come pll la libreria in ingresso...
-    const fs::path gen_pll_1_pth = write_pll(lib, fmt::format("{}-1", fbasename), args);
-    const std::string gen_pll_1_pth_str{ gen_pll_1_pth.string() };
+    const fs::path out_pll_pth{ args.output() / fmt::format("{}-1.pll", fbasename) };
+    const std::string out_pll_pth_str{ out_pll_pth.string() };
+    write_pll(lib, out_pll_pth_str, args);
     // ...Lo rileggo generando una nuova libreria...
-    const sys::MemoryMappedFile buf2(gen_pll_1_pth_str);
-    plcb::Library lib2( gen_pll_1_pth.stem().string() );
-    parse_buffer(pll::parse, buf2.as_string_view(), gen_pll_1_pth, gen_pll_1_pth_str, lib2, args, issues);
-    //if(lib2!=lib) ...
-    // ...E lo riscrivo
-    const fs::path gen_pll_2_pth = write_pll(lib2, fmt::format("{}-2", fbasename), args);
+    const sys::MemoryMappedFile buf2(out_pll_pth_str);
+    plcb::Library lib2( out_pll_pth.stem().string() );
+    parse_buffer(pll::parse, buf2.as_string_view(), out_pll_pth, out_pll_pth_str, lib2, args, issues);
+    // ...E la scrivo di nuovo
+    const fs::path out_pll2_pth{ args.output() / fmt::format("{}-2.pll", fbasename) };
+    write_pll(lib2, out_pll2_pth.string(), args);
 }
 #endif
 
@@ -376,14 +374,19 @@ int main( int argc, const char* argv[] )
               #ifdef PLL_TEST
                 test_pll(fbasename, lib, args, issues);
               #else
-                write_plclib(lib, fbasename, args);
+                const fs::path out_plclib_pth{ args.output() / fmt::format("{}.plclib", fbasename) };
+                write_plclib(lib, out_plclib_pth.string(), args);
               #endif
                }
             else if( ext == ".h" )
                {// h -> pll,plclib
                 parse_buffer(h::parse, file_buf.as_string_view(), pth, str_pth, lib, args, issues);
-                write_pll(lib, fbasename, args);
-                write_plclib(lib, fbasename, args);
+
+                const fs::path out_pll_pth{ args.output() / fmt::format("{}.pll", fbasename) };
+                write_pll(lib, out_pll_pth.string(), args);
+
+                const fs::path out_plclib_pth{ args.output() / fmt::format("{}.plclib", fbasename) };
+                write_plclib(lib, out_plclib_pth.string(), args);
                }
             else
                {

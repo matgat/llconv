@@ -94,7 +94,7 @@
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
     <PostBuildEvent>
-      <Command>copy /Y "$(TargetPath)" "$(userprofile)\Bin\$(TargetFileName)"</Command>
+      <Command>copy /B "$(TargetPath)" "$(userprofile)\Bin\$(TargetFileName)"</Command>
     </PostBuildEvent>
     <PostBuildEvent>
       <Message>Deploy release executable</Message>

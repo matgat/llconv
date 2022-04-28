@@ -5,7 +5,7 @@
 
     OVERVIEW
     ---------------------------------------------
-    Collects Sipro stuff
+    Collects Sipro specific stuff
 
     DEPENDENCIES:
     --------------------------------------------- */

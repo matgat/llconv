@@ -35,9 +35,12 @@
     //#include <chrono> // std::chrono::system_clock
     //using namespace std::chrono_literals; // 1s, 2h, ...
     #include <ctime> // std::time_t, std::strftime
-    #include <regex> // std::regex*
+
     #include <filesystem> // std::filesystem
     namespace fs = std::filesystem;
+
+    #include <regex> // std::regex*
+    #include "string-utilities.hpp" // str::glob_match
 
 
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -540,58 +543,54 @@ void delete_file(const std::string& pth) noexcept
 }
 
 
+
 //---------------------------------------------------------------------------
-// glob("/aaa/bbb/*.txt");
-std::vector<fs::path> file_glob(const std::string_view str_pattern)
+// file_glob("/aaa/bbb/*.txt");
+std::vector<fs::path> file_glob(const fs::path pth)
 {
-    const fs::path path_pattern = expand_env_variables( std::string(str_pattern) );
-
-    auto contains_wildcards = [](const std::string& pth) noexcept -> bool
+    if( str::contains_wildcards(pth.parent_path().string()) )
        {
-        //return std::regex_search(pth, std::regex("*?"));
-        return pth.rfind('*') != std::string::npos || pth.rfind('?') != std::string::npos;
-       };
-
-    if( contains_wildcards(path_pattern.parent_path().string()) )
-       {
-        throw std::runtime_error("glob: Wildcards in directories not supported (" + path_pattern.string() + ")");
+        throw std::runtime_error("sys::file_glob: Wildcards in directories not supported");
        }
 
-    //if( path_pattern.is_relative() ) path_pattern = fs::absolute(path_pattern); // Ensure absolute path?
-    const fs::path parent_folder = path_pattern.parent_path().empty() ? fs::current_path() : path_pattern.parent_path();
-    const std::string file_pattern = path_pattern.filename().string();
+    //if( pth.is_relative() ) pth = fs::absolute(pth); // Ensure absolute path?
+    fs::path parent_folder = pth.parent_path();
+    if( parent_folder.empty() ) parent_folder = fs::current_path();
+
+    const std::string filename_glob = pth.filename().string();
     std::vector<fs::path> result;
-    if( contains_wildcards(file_pattern) && fs::exists(parent_folder) )
+    if( str::contains_wildcards(filename_glob) && fs::exists(parent_folder) )
        {
-        try{
-            // Prepare match pattern: create a regular expression from glob pattern
-            auto glob2regex = [](const std::string& glob_pattern) noexcept -> std::string
+        result.reserve(16); // Minimize initial allocations
+        for( const auto& entry : fs::directory_iterator(parent_folder, fs::directory_options::follow_directory_symlink |
+                                                                       fs::directory_options::skip_permission_denied) )
+           {// Collect if matches
+            if( entry.exists() && entry.is_regular_file() && str::glob_match(entry.path().filename().string().c_str(), filename_glob.c_str()) )
                {
-                // Escape special characters in file name
-                std::string regexp_pattern = std::regex_replace(glob_pattern, std::regex("([" R"(\$\.\+\-\=\[\]\(\)\{\}\|\^\!\:\\)" "])"), "\\$1");
-                // Substitute pattern
-                regexp_pattern = std::regex_replace(regexp_pattern, std::regex(R"(\*)"), ".*");
-                regexp_pattern = std::regex_replace(regexp_pattern, std::regex(R"(\?)"), ".");
-                //fmtstr::print("regexp_pattern: {}" ,regexp_pattern);
-                return regexp_pattern;
-               };
-            const std::regex reg(glob2regex(file_pattern), std::regex_constants::icase);
-            for( const auto& entry : fs::directory_iterator(parent_folder, fs::directory_options::follow_directory_symlink |
-                                                                           fs::directory_options::skip_permission_denied) )
-               {// Collect if matches
-                if( entry.exists() && entry.is_regular_file() && std::regex_match(entry.path().filename().string(), reg) )
-                   {
-                    //const fs::path entry_path = parent_folder.is_absolute() ? entry.path() : fs::proximate(entry.path());
-                    result.push_back( entry.path() );
-                   }
+                //const fs::path entry_path = parent_folder.is_absolute() ? entry.path() : fs::proximate(entry.path());
+                result.push_back( entry.path() );
                }
            }
-        catch( std::exception&) {} // Not a directory, do nothing
+
+        // Using std::regex
+        //// Create a regular expression from glob pattern
+        //auto glob2regex = [](const std::string& glob_pattern) noexcept -> std::string
+        //   {
+        //    // Escape special characters in file name
+        //    std::string regexp_pattern = std::regex_replace(glob_pattern, std::regex("([" R"(\$\.\+\-\=\[\]\(\)\{\}\|\^\!\:\\)" "])"), "\\$1");
+        //    // Substitute pattern
+        //    regexp_pattern = std::regex_replace(regexp_pattern, std::regex(R"(\*)"), ".*");
+        //    regexp_pattern = std::regex_replace(regexp_pattern, std::regex(R"(\?)"), ".");
+        //    //fmtstr::print("regexp_pattern: {}" ,regexp_pattern);
+        //    return regexp_pattern;
+        //   };
+        //const std::regex reg(glob2regex(filename_glob), std::regex_constants::icase);
+        //... std::regex_match(entry.path().filename().string(), reg)
        }
     else
-       {
+       {// Nothing to glob
         result.reserve(1);
-        result.push_back(path_pattern);
+        result.push_back(pth);
        }
 
     return result;
@@ -658,6 +657,8 @@ std::size_t remove_files_inside(const std::filesystem::path& dir, std::regex&& r
 //    os.exceptions(os.exceptions() | std::ios::failbit | std::ifstream::badbit);
 //    os << txt;
 //}
+
+
 
 //---------------------------------------------------------------------------
 // Buffer the content of a file using c++ streams
