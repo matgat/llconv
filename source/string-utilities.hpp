@@ -190,8 +190,8 @@ bool glob_match(const char* text, const char* glob, const char dont_match ='/')
            }
         else
            {// '*'-loop: backtrack after the last '*'
-            assert(glob_backup!=nullptr);
             if(text_backup) text = ++text_backup;
+            assert(glob_backup!=nullptr);
             glob = glob_backup;
            }
        }
