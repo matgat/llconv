@@ -134,28 +134,29 @@ class Arguments final
 
     static void print_help() noexcept
        {
-        std::cout << "\nThis is a conversion utility between these formats:\n"
-                     "    \"*.h\" Sipro #defines file\n"
-                     "    \"*.pll\" LogicLab3 library file\n"
-                     "    \"*.plclib\" LogicLab5 library file\n"
+        std::cout << "\nllconv (ver. " << __DATE__ << ")\n"
+                     "A conversion utility between these formats:\n"
+                     "    *.h: Sipro #defines file\n"
+                     "    *.pll: LogicLab3 library file\n"
+                     "    *.plclib: LogicLab5 library file\n"
                      "Sipro *.h files resemble a c-like header with #define directives.\n"
                      "LogicLab files are text containers of IEC 61131-3 ST code.\n"
                      "The supported transformations are:\n"
-                     "    \"*.h\" -> \"*.pll\", \"*.plclib\"\n"
-                     "    \"*.pll\" -> \"*.plclib\"\n"
+                     "    *.h -> *.pll, *.plclib\n"
+                     "    *.pll -> *.plclib\n"
                      "\n";
        }
 
     static void print_usage() noexcept
        {
-        std::cerr << "\nUsage:\n"
+        std::cerr << "\nUsage (ver. " << __DATE__ << "):\n"
                      "   llconv -fussy -verbose -options sort,schemaver:2.8 path/to/*.pll -output path/\n"
                      "       -clear (Delete existing files in output folder. Use with care!)\n"
                      "       -fussy (Handle issues as blocking errors)\n"
                      "       -help (Just print help info and abort)\n"
-                     "       -options (LogicLab plclib schema version)\n"
+                     "       -options\n"
                      "            schema-ver:<num> (Indicate a schema version for LogicLab plclib output)\n"
-                     "            sort:<str> (Sort objects by criteria default:by-name)\n"
+                     "            sort:<str> (Objects sorting criteria default:by-name)\n"
                      "       -output <path> (Set output directory or file)\n"
                      "       -verbose (Print more info on stdout)\n"
                      "\n";
@@ -304,7 +305,7 @@ int main( int argc, const char* argv[] )
 
         if( args.verbose() )
            {
-            std::cout << "**** llconv (" << __DATE__ << ") ****\n"; // sys::human_readable_time_stamp()
+            std::cout << "---- llconv (ver. " << __DATE__ << ") ----\n";
             std::cout << "Running in: " << fs::current_path().string() << '\n';
            }
 
