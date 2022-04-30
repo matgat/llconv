@@ -11,6 +11,7 @@ VPATH += ../source/
 SOURCES += llconv.cpp
 
 HEADERS += \
+    basic-parser.hpp \
     debug.hpp \
     format_string.hpp \
     h-parser.hpp \

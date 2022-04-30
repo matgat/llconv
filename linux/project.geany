@@ -32,20 +32,20 @@ current_page=0
 FILE_NAME_0=9309;C++;0;EUTF-8;0;1;0;%2Fhome%2Fmat%2Fdev%2Fllconv%2Fsource%2Fllconv.cpp;0;4
 
 [VTE]
-last_dir=/home/mat/dev/llconv/source
+last_dir=/home/mat/dev/llconv/linux/build
 
 [build-menu]
 EX_00_LB=Run
-EX_00_CM=./llconv -verbose ../test/test.pll
-EX_00_WD=%p/build
+EX_00_CM=./llconv -verbose ../../test/test.pll
+EX_00_WD=%p/linux/build
 EX_01_LB=Test
-EX_01_CM=time ./llconv -fussy -verbose ../test/test.pll -output $HOME/desktop
-EX_01_WD=%p/build
+EX_01_CM=time ./llconv -fussy -verbose ../../test/test.pll -output $HOME/Desktop
+EX_01_WD=%p/linux/build
 C++FT_00_LB=_Compile
 C++FT_00_CM=g++ -std=c++2b -funsigned-char -Wall -Wextra -Wpedantic -Wconversion -c "%f"
 C++FT_00_WD=
 C++FT_01_LB=_Build
-C++FT_01_CM=g++ -std=c++2b -funsigned-char -Wall -Wextra -Wpedantic -Wconversion -O3 -DFMT_HEADER_ONLY -Isource/fmt/include -o "build/llconv" "source/llconv.cpp"
+C++FT_01_CM=g++ -std=c++2b -funsigned-char -Wall -Wextra -Wpedantic -Wconversion -O3 -DFMT_HEADER_ONLY -Isource/fmt/include -o "linux/build/llconv" "source/llconv.cpp"
 C++FT_01_WD=%p
 C++FT_02_LB=_Lint
 C++FT_02_CM=cppcheck --language=c++ --enable=warning,style --suppress=passedByValue --template=gcc "%f"
@@ -61,5 +61,5 @@ NF_02_LB=Make _Object
 NF_02_CM=make %e.o
 NF_02_WD=%p/stuff
 NF_03_LB=Build with clang
-NF_03_CM=clang++ -std=c++2b -funsigned-char -Wall -Wextra -Wpedantic -Wconversion -O3 -DFMT_HEADER_ONLY -Isource/fmt/include -o "build/llconv" "source/llconv.cpp"
+NF_03_CM=clang++ -std=c++2b -funsigned-char -Wall -Wextra -Wpedantic -Wconversion -O3 -DFMT_HEADER_ONLY -Isource/fmt/include -o "linux/build/llconv" "source/llconv.cpp"
 NF_03_WD=%p

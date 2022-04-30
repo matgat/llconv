@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 project(llconv VERSION 0.1
-                  DESCRIPTION "Translates a LogicLab3 pll file to LogicLab5 plclib"
+                  DESCRIPTION "Converts h,pll files to plclib"
                   LANGUAGES CXX)
 
 include_directories(source)
@@ -16,7 +16,7 @@ else()
     add_compile_options(-Wall -Wextra -Wpedantic -Wconversion -Werror -O3 -fno-rtti -funsigned-char)
 endif()
 
-target_compile_features(llconv PUBLIC cxx_std_17)
+target_compile_features(llconv PUBLIC cxx_std_20)
 
 set_target_properties(llconv PROPERTIES
     #CXX_STANDARD 20
@@ -27,5 +27,3 @@ set_target_properties(llconv PROPERTIES
 )
 #set_property(TARGET llconv PROPERTY INTERPROCEDURAL_OPTIMIZATION True)
 
-
-#install(TARGETS llconv DESTINATION /usr/lib)

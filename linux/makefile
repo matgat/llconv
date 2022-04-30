@@ -1,6 +1,6 @@
 PRJNAME = llconv
 SRCDIR = ../source
-BLDDIR = ../build
+BLDDIR = ./build
 VPATH := $(SRCDIR)
 MAIN = $(SRCDIR)/llconv.cpp
 HEADERS = $(wildcard $(SRCDIR)/*.hpp)
