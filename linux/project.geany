@@ -32,7 +32,7 @@ current_page=0
 FILE_NAME_0=9309;C++;0;EUTF-8;0;1;0;%2Fhome%2Fmat%2Fdev%2Fllconv%2Fsource%2Fllconv.cpp;0;4
 
 [VTE]
-last_dir=/home/mat/dev/llconv/linux/build
+last_dir=/home/mat/dev/llconv/source
 
 [build-menu]
 EX_00_LB=Run
@@ -53,13 +53,13 @@ C++FT_02_WD=
 filetypes=C++;
 NF_00_LB=_Make
 NF_00_CM=make
-NF_00_WD=%p/stuff
+NF_00_WD=%p/linux
 NF_01_LB=Make Custom _Target...
 NF_01_CM=
-NF_01_WD=
-NF_02_LB=Make _Object
-NF_02_CM=make %e.o
-NF_02_WD=%p/stuff
-NF_03_LB=Build with clang
-NF_03_CM=clang++ -std=c++2b -funsigned-char -Wall -Wextra -Wpedantic -Wconversion -O3 -DFMT_HEADER_ONLY -Isource/fmt/include -o "linux/build/llconv" "source/llconv.cpp"
+NF_01_WD=%p
+NF_02_LB=Build with clang
+NF_02_CM=clang++ -std=c++2b -funsigned-char -Wall -Wextra -Wpedantic -Wconversion -O3 -DFMT_HEADER_ONLY -Isource/fmt/include -o "linux/build/llconv" "source/llconv.cpp"
+NF_02_WD=%p
+NF_03_LB=clang-tidy
+NF_03_CM=clang-tidy "source/llconv.cpp" -- -std=c++2b -funsigned-char -DFMT_HEADER_ONLY -Isource/fmt/include
 NF_03_WD=%p
