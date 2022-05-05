@@ -31,9 +31,8 @@ namespace pll //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 class Parser final : public BasicParser
 {
  public:
-    Parser(const std::string_view b, std::vector<std::string>& sl, const bool f)
-      : BasicParser(b,sl,f) {}
-
+    Parser(const std::string& pth, const std::string_view dat, std::vector<std::string>& lst, const bool fus)
+      : BasicParser(pth,dat,lst,fus) {}
 
     //-----------------------------------------------------------------------
     void check_heading_comment(plcb::Library& lib)
@@ -161,7 +160,7 @@ class Parser final : public BasicParser
                }
             else
                {
-                throw fmtstr::error("Unexpected content in VAR_GLOBAL declaration: {}", str::escape(skip_line()));
+                throw create_parse_error(fmt::format("Unexpected content in VAR_GLOBAL declaration: {}", str::escape(skip_line())));
                }
            }
         else
@@ -203,7 +202,7 @@ class Parser final : public BasicParser
                }
             ++i;
            }
-        throw fmtstr::parse_error("Unclosed block comment", line_start, i_start);
+        throw create_parse_error("Unclosed block comment", line_start, i_start);
        }
 
 
@@ -233,13 +232,13 @@ class Parser final : public BasicParser
         skip_blanks();
         if( i>=siz || buf[i]!=':' )
            {
-            throw fmtstr::error("Missing \':\' after directive {}", dir.key());
+            throw create_parse_error(fmt::format("Missing \':\' after directive {}", dir.key()));
            }
         ++i; // Skip ':'
         skip_blanks();
         if( i>=siz )
            {
-            throw fmtstr::error("Truncated directive {}", dir.key());
+            throw create_parse_error(fmt::format("Truncated directive {}", dir.key()));
            }
 
         if( buf[i]=='\"' )
@@ -251,11 +250,11 @@ class Parser final : public BasicParser
                {
                 if( buf[i]=='\n' )
                    {
-                    throw fmtstr::error("Unclosed directive {} value (\'\"\' expected)", dir.key());
+                    throw create_parse_error(fmt::format("Unclosed directive {} value (\'\"\' expected)", dir.key()));
                    }
                 else if( buf[i]=='<' || buf[i]=='>' )
                    {
-                    throw fmtstr::error("Invalid character \'{}\' in directive {} value", buf[i], dir.key());
+                    throw create_parse_error(fmt::format("Invalid character \'{}\' in directive {} value", buf[i], dir.key()));
                    }
                 ++i;
                }
@@ -269,7 +268,7 @@ class Parser final : public BasicParser
         skip_blanks();
         if( i>=siz || buf[i]!='}' )
            {
-            throw fmtstr::error("Unclosed directive {} after {}", dir.key(), dir.value());
+            throw create_parse_error(fmt::format("Unclosed directive {} after {}", dir.key(), dir.value()));
            }
         ++i; // Skip '}'
         //DBGLOG("    [*] Collected directive \"{}\" at line {}\n", dir.key(), line)
@@ -314,11 +313,11 @@ class Parser final : public BasicParser
             // Some checks
             //if( strct.members().back().has_value() )
             //   {
-            //    throw fmtstr::error("Struct member \"{}\" cannot have a value ({})", strct.members().back().name(), strct.members().back().value());
+            //    throw create_parse_error(fmt::format("Struct member \"{}\" cannot have a value ({})", strct.members().back().name(), strct.members().back().value()));
             //   }
             if( strct.members().back().has_address() )
                {
-                throw fmtstr::error("Struct member \"{}\" cannot have an address", strct.members().back().name());
+                throw create_parse_error(fmt::format("Struct member \"{}\" cannot have an address", strct.members().back().name()));
                }
            }
 
@@ -339,7 +338,7 @@ class Parser final : public BasicParser
         skip_blanks();
         if( !eat(":="sv) )
            {
-            throw fmtstr::error("Value not found in enum element \"{}\"", elem.name());
+            throw create_parse_error(fmt::format("Value not found in enum element \"{}\"", elem.name()));
            }
         skip_blanks();
         elem.set_value( collect_numeric_value() );
@@ -396,7 +395,7 @@ class Parser final : public BasicParser
         skip_blanks();
         if( !eat(");"sv) )
            {
-            throw fmtstr::error("Expected termination \");\" after enum \"{}\"", en.name());
+            throw create_parse_error(fmt::format("Expected termination \");\" after enum \"{}\"", en.name()));
            }
 
         // Expecting a line end now
@@ -418,7 +417,7 @@ class Parser final : public BasicParser
         skip_blanks();
         if( i>=siz || buf[i]!='(' )
            {
-            throw fmtstr::error("Expected \"(min..max)\" in subrange \"{}\"", subr.name());
+            throw create_parse_error(fmt::format("Expected \"(min..max)\" in subrange \"{}\"", subr.name()));
            }
         ++i; // Skip '('
         skip_blanks();
@@ -426,20 +425,20 @@ class Parser final : public BasicParser
         skip_blanks();
         if( !eat(".."sv) )
            {
-            throw fmtstr::error("Expected \"..\" in subrange \"{}\"", subr.name());
+            throw create_parse_error(fmt::format("Expected \"..\" in subrange \"{}\"", subr.name()));
            }
         skip_blanks();
         const auto max_val = extract_integer();
         skip_blanks();
         if( i>=siz || buf[i]!=')' )
            {
-            throw fmtstr::error("Expected \')\' in subrange \"{}\"", subr.name());
+            throw create_parse_error(fmt::format("Expected \')\' in subrange \"{}\"", subr.name()));
            }
         ++i; // Skip ')'
         skip_blanks();
         if( i>=siz || buf[i]!=';' )
            {
-            throw fmtstr::error("Expected \';\' in subrange \"{}\"", subr.name());
+            throw create_parse_error(fmt::format("Expected \';\' in subrange \"{}\"", subr.name()));
            }
         ++i; // Skip ';'
         subr.set_range(min_val, max_val);
@@ -470,7 +469,7 @@ class Parser final : public BasicParser
         skip_blanks();
         var.set_name( collect_identifier() );
         skip_blanks();
-        if( i<siz && buf[i]==',' ) throw fmtstr::error("Multiple names not supported in declaration of variable \"{}\"", var.name());
+        if( i<siz && buf[i]==',' ) throw create_parse_error(fmt::format("Multiple names not supported in declaration of variable \"{}\"", var.name()));
 
         // [Location address]
         if( eat_token("AT"sv) )
@@ -478,7 +477,7 @@ class Parser final : public BasicParser
             skip_blanks();
             if( i>=siz || buf[i]!='%' )
                {
-                throw fmtstr::error("Expected \'%\' in variable \"{}\" address", var.name());
+                throw create_parse_error(fmt::format("Expected \'%\' in variable \"{}\" address", var.name()));
                }
             ++i; // Skip '%'
             // Here expecting something like: MB300.6000
@@ -487,7 +486,7 @@ class Parser final : public BasicParser
             var.address().set_index( collect_digits() );
             if( i>=siz || buf[i]!='.' )
                {
-                throw fmtstr::error("Expected \'.\' in variable \"{}\" address", var.name());
+                throw create_parse_error(fmt::format("Expected \'.\' in variable \"{}\" address", var.name()));
                }
             ++i; // Skip '.'
             var.address().set_subindex( collect_digits() );
@@ -497,7 +496,7 @@ class Parser final : public BasicParser
         // [Name/Type separator]
         if( i>=siz || buf[i]!=':' )
            {
-            throw fmtstr::error("Expected \':\' before variable \"{}\" type", var.name());
+            throw create_parse_error(fmt::format("Expected \':\' before variable \"{}\" type", var.name()));
            }
         ++i; // Skip ':'
 
@@ -519,7 +518,7 @@ class Parser final : public BasicParser
             skip_blanks();
             if( i>=siz || buf[i]!='[' )
                {
-                throw fmtstr::error("Expected \'[\' in array variable \"{}\"", var.name());
+                throw create_parse_error(fmt::format("Expected \'[\' in array variable \"{}\"", var.name()));
                }
             ++i; // Skip '['
             skip_blanks();
@@ -527,25 +526,25 @@ class Parser final : public BasicParser
             skip_blanks();
             if( !eat(".."sv) )
                {
-                throw fmtstr::error("Expected \"..\" in array index of variable \"{}\"", var.name());
+                throw create_parse_error(fmt::format("Expected \"..\" in array index of variable \"{}\"", var.name()));
                }
             skip_blanks();
             const std::size_t idx_last = extract_index();
             skip_blanks();
             if( i<siz && buf[i]==',' )
                {
-                throw fmtstr::error("Multidimensional arrays not yet supported in variable \"{}\"", var.name());
+                throw create_parse_error(fmt::format("Multidimensional arrays not yet supported in variable \"{}\"", var.name()));
                }
             // TODO: Collect array dimensions (multidimensional: dim0, dim1, dim2)
             if( i>=siz || buf[i]!=']' )
                {
-                throw fmtstr::error("Expected \']\' in array variable \"{}\"", var.name());
+                throw create_parse_error(fmt::format("Expected \']\' in array variable \"{}\"", var.name()));
                }
             ++i; // Skip ']'
             skip_blanks();
             if( !eat_token("OF"sv) )
                {
-                throw fmtstr::error("Expected \"OF\" in array variable \"{}\"", var.name());
+                throw create_parse_error(fmt::format("Expected \"OF\" in array variable \"{}\"", var.name()));
                }
             var.set_array_range(idx_start, idx_last);
             skip_blanks();
@@ -562,12 +561,12 @@ class Parser final : public BasicParser
             const std::size_t len = extract_index();
             if( len<=1u )
                {
-                throw fmtstr::error("Invalid length ({}) of variable \"{}\"", len, var.name());
+                throw create_parse_error(fmt::format("Invalid length ({}) of variable \"{}\"", len, var.name()));
                }
             skip_blanks();
             if( i>=siz || buf[i]!=']' )
                {
-                throw fmtstr::error("Expected \']\' in variable length \"{}\"", var.name());
+                throw create_parse_error(fmt::format("Expected \']\' in variable length \"{}\"", var.name()));
                }
             ++i; // Skip ']'
             skip_blanks();
@@ -580,13 +579,13 @@ class Parser final : public BasicParser
             ++i; // Skip ':'
             if( i>=siz || buf[i]!='=' )
                {
-                throw fmtstr::error("Unexpected colon in variable \"{}\" type", var.name());
+                throw create_parse_error(fmt::format("Unexpected colon in variable \"{}\" type", var.name()));
                }
             ++i; // Skip '='
             skip_blanks();
             if( i<siz && buf[i]=='[' )
                {
-                throw fmtstr::error("Array initialization not yet supported in variable \"{}\"", var.name());
+                throw create_parse_error(fmt::format("Array initialization not yet supported in variable \"{}\"", var.name()));
                }
 
             //var.set_value( collect_numeric_value() );
@@ -603,11 +602,11 @@ class Parser final : public BasicParser
                    }
                 else if( buf[i]=='\n' )
                    {
-                    throw fmtstr::error("Unclosed variable \"{}\" value {} (\';\' expected)", var.name(), std::string_view(buf+i_start, i-i_start));
+                    throw create_parse_error(fmt::format("Unclosed variable \"{}\" value {} (\';\' expected)", var.name(), std::string_view(buf+i_start, i-i_start)));
                    }
                 else if( buf[i]==':' || buf[i]=='=' || buf[i]=='<' || buf[i]=='>' || buf[i]=='\"' )
                    {
-                    throw fmtstr::error("Invalid character \'{}\' in variable \"{}\" value {}", buf[i], var.name(), std::string_view(buf+i_start, i-i_start));
+                    throw create_parse_error(fmt::format("Invalid character \'{}\' in variable \"{}\" value {}", buf[i], var.name(), std::string_view(buf+i_start, i-i_start)));
                    }
                 else
                    {// Collecting value
@@ -667,7 +666,7 @@ class Parser final : public BasicParser
                 // Check if a value was needed
                 if( value_needed && !vars.back().has_value() )
                    {
-                    throw fmtstr::error("Value not specified for var \"{}\"", vars.back().name());
+                    throw create_parse_error(fmt::format("Value not specified for var \"{}\"", vars.back().name()));
                    }
                }
            }
@@ -682,7 +681,7 @@ class Parser final : public BasicParser
             skip_blanks();
             if(i>=siz)
                {
-                throw fmtstr::error("{} not closed by {}", start_tag, end_tag);
+                throw create_parse_error(fmt::format("{} not closed by {}", start_tag, end_tag));
                }
             else if( eat_line_end() )
                {// Sono ammesse righe vuote
@@ -751,7 +750,7 @@ class Parser final : public BasicParser
                        }
                     else
                        {
-                        throw fmtstr::error("Unexpected content after VAR of {} {}: {}", start_tag, pou.name(), str::escape(skip_line()));
+                        throw create_parse_error(fmt::format("Unexpected content after VAR of {} {}: {}", start_tag, pou.name(), str::escape(skip_line())));
                        }
                    }
                 else if( eat_token(end_tag) )
@@ -787,7 +786,7 @@ class Parser final : public BasicParser
         pou.set_name( collect_identifier() );
         if( pou.name().empty() )
            {
-            throw fmtstr::error("No name found for {}", start_tag);
+            throw create_parse_error(fmt::format("No name found for {}", start_tag));
            }
 
         // Get possible return type
@@ -800,18 +799,18 @@ class Parser final : public BasicParser
             pou.set_return_type( collect_until_char_trimmed('\n') );
             if( pou.return_type().empty() )
                {
-                throw fmtstr::error("Empty return type in {} {}", start_tag, pou.name());
+                throw create_parse_error(fmt::format("Empty return type in {} {}", start_tag, pou.name()));
                }
             if( !needs_ret_type )
                {
-                throw fmtstr::error("Return type specified in {} {}", start_tag, pou.name());
+                throw create_parse_error(fmt::format("Return type specified in {} {}", start_tag, pou.name()));
                }
            }
         else
            {// No return type
             if( needs_ret_type )
                {
-                throw fmtstr::error("Return type not specified in {} {}", start_tag, pou.name());
+                throw create_parse_error(fmt::format("Return type not specified in {} {}", start_tag, pou.name()));
                }
            }
 
@@ -821,7 +820,7 @@ class Parser final : public BasicParser
         // Collect the code body
         if( pou.code_type().empty() )
            {
-            throw fmtstr::error("CODE not found in {} {}", start_tag, pou.name());
+            throw create_parse_error(fmt::format("CODE not found in {} {}", start_tag, pou.name()));
            }
         //else if( pou.code_type() != "ST"sv )
         //   {
@@ -841,7 +840,7 @@ class Parser final : public BasicParser
         skip_blanks();
         if( i>=siz || buf[i]!=';' )
            {
-            throw fmtstr::error("Missing \';\' after macro parameter");
+            throw create_parse_error("Missing \';\' after macro parameter");
            }
         ++i; // Skip ';'
         skip_blanks();
@@ -899,7 +898,7 @@ class Parser final : public BasicParser
             skip_blanks();
             if(i>=siz)
                {
-                throw fmtstr::error("MACRO not closed by END_MACRO");
+                throw create_parse_error("MACRO not closed by END_MACRO");
                }
             else if( eat_line_end() )
                {// Sono ammesse righe vuote
@@ -966,7 +965,7 @@ class Parser final : public BasicParser
         macro.set_name( collect_identifier() );
         if( macro.name().empty() )
            {
-            throw fmtstr::error("No name found for MACRO");
+            throw create_parse_error("No name found for MACRO");
            }
 
         collect_macro_header(macro);
@@ -974,7 +973,7 @@ class Parser final : public BasicParser
         // Collect the code body
         if( macro.code_type().empty() )
            {
-            throw fmtstr::error("CODE not found in MACRO {}", macro.name());
+            throw create_parse_error(fmt::format("CODE not found in MACRO {}", macro.name()));
            }
         //else if( macro.code_type() != "ST"sv )
         //   {
@@ -998,7 +997,7 @@ class Parser final : public BasicParser
             skip_blanks();
             if( i>=siz )
                {
-                throw fmtstr::error("VAR_GLOBAL not closed by END_VAR");
+                throw create_parse_error("VAR_GLOBAL not closed by END_VAR");
                }
             else if( eat_line_end() )
                {// Nella lista variabili sono ammesse righe vuote
@@ -1037,7 +1036,7 @@ class Parser final : public BasicParser
                 // Check if a value was needed
                 if( value_needed && !vgroups.back().variables().back().has_value() )
                    {
-                    throw fmtstr::error("Value not specified for variable \"{}\"", vgroups.back().variables().back().name());
+                    throw create_parse_error(fmt::format("Value not specified for variable \"{}\"", vgroups.back().variables().back().name()));
                    }
                }
            }
@@ -1058,7 +1057,7 @@ class Parser final : public BasicParser
             skip_blanks();
             if( i>=siz )
                {
-                throw fmtstr::error("TYPE not closed by END_TYPE");
+                throw create_parse_error("TYPE not closed by END_TYPE");
                }
             else if( eat_line_end() )
                {
@@ -1083,7 +1082,7 @@ class Parser final : public BasicParser
                     skip_blanks();
                     if( i>=siz || buf[i]!=':' )
                        {
-                        throw fmtstr::error("Missing \':\' after type name \"{}\"", type_name);
+                        throw create_parse_error(fmt::format("Missing \':\' after type name \"{}\"", type_name));
                        }
                     ++i; // Skip ':'
                     // Check what it is (struct, typedef, enum, subrange)
@@ -1138,9 +1137,9 @@ class Parser final : public BasicParser
 
 //---------------------------------------------------------------------------
 // Parse pll file
-void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::string>& issues, const bool fussy)
+void parse(const std::string& file_path, const std::string_view buf, plcb::Library& lib, std::vector<std::string>& issues, const bool fussy)
 {
-    Parser parser(buf, issues, fussy);
+    Parser parser(file_path, buf, issues, fussy);
 
     try{
         parser.check_heading_comment(lib);
@@ -1150,13 +1149,13 @@ void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::stri
             parser.collect_next(lib);
            }
        }
-    catch(fmtstr::parse_error&)
+    catch(parse_error&)
        {
         throw;
        }
     catch(std::exception& e)
        {
-        throw fmtstr::parse_error(e.what(), parser.curr_line(), parser.curr_pos());
+        throw parser.create_parse_error(e.what());
        }
 }
 

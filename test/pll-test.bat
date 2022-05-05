@@ -3,6 +3,7 @@ rem -----------------------------------------------------------
 rem This will compare the generated file, useful when compiling
 rem with define PLL_TEST
 rem -----------------------------------------------------------
+set llconv="..\msvc\x64-Debug\llconv.exe"
 set fname=test
 set out_dir=D:\HD\Desktop
 set wmerge="%ProgramFiles%\WinMerge\WinMergeU.exe" /e /u
@@ -10,7 +11,7 @@ set wmerge="%ProgramFiles%\WinMerge\WinMergeU.exe" /e /u
 set in_file=%fname%.pll
 
 :CONVERT
-..\msvc\x64-Debug\llconv.exe --fussy --verbose "%in_file%" --output "%out_dir%"
+%llconv% --fussy --verbose "%in_file%" --output "%out_dir%"
 if errorlevel 1 goto ERROR
 
 :COMPARE

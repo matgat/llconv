@@ -20,7 +20,6 @@
 #include "system.hpp" // sys::*, fs::*
 #include "string-utilities.hpp" // str::tolower
 #include "keyvals.hpp" // str::keyvals
-#include "format_string.hpp" // fmtstr::parse_error
 #include "h-parser.hpp" // h::*
 #include "pll-parser.hpp" // pll::*
 #include "plc-elements.hpp" // plcb::*
@@ -219,11 +218,11 @@ template<typename F> void parse_buffer(F parsefunct, const std::string_view buf,
 {
     std::vector<std::string> parse_issues;
     try{
-        parsefunct(buf, lib, parse_issues, args.fussy());
+        parsefunct(str_pth, buf, lib, parse_issues, args.fussy());
        }
-    catch( fmtstr::parse_error& e)
+    catch( parse_error& e)
        {
-        sys::edit_text_file( str_pth, e.pos() );
+        sys::edit_text_file( e.file_path(), e.pos() );
         throw;
        }
     if(args.verbose()) std::cout << "    " << lib.to_str() << '\n';

@@ -4,7 +4,7 @@ rem This will compare the generated files of two version
 rem of the program, one in path and the other in development
 rem -----------------------------------------------------------
 set llconv_pre=llconv.exe
-set llconv_dev=..\msvc\x64-Release\llconv.exe
+set llconv_dev=..\msvc\x64-Debug\llconv.exe
 set llconv_args=-fussy -clear
 set out_dir=D:\HD\Desktop
 set h_sources=%UserProfile%\Macotec\Machines\m32-Strato\sde\PROG\*.h

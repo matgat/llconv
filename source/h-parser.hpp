@@ -85,8 +85,8 @@ class DefineBuf final
 class Parser final : public BasicParser
 {
  public:
-    Parser(const std::string_view b, std::vector<std::string>& sl, const bool f)
-      : BasicParser(b,sl,f) {}
+    Parser(const std::string& pth, const std::string_view dat, std::vector<std::string>& lst, const bool fus)
+      : BasicParser(pth,dat,lst,fus) {}
 
     //-----------------------------------------------------------------------
     [[nodiscard]] DefineBuf next_define()
@@ -119,13 +119,13 @@ class Parser final : public BasicParser
                    }
                }
            }
-        catch(fmtstr::parse_error&)
+        catch(parse_error&)
            {
             throw;
            }
         catch(std::exception& e)
            {
-            throw fmtstr::parse_error(e.what(), line, i);
+            throw create_parse_error(e.what());
            }
 
         return def;
@@ -176,7 +176,7 @@ class Parser final : public BasicParser
                }
             ++i;
            }
-        throw fmtstr::parse_error("Unclosed block comment", line_start, i_start);
+        throw create_parse_error("Unclosed block comment", line_start, i_start);
        }
 
 
@@ -269,79 +269,104 @@ class Parser final : public BasicParser
 
 
 //---------------------------------------------------------------------------
+void export_register(const sipro::Register& reg, const DefineBuf& def, std::vector<plcb::Variable>& vars)
+{
+    plcb::Variable var;
+
+    var.set_name( def.label() );
+    var.set_type( reg.iec_type() );
+    if( reg.is_va() ) var.set_length( reg.get_va_length() );
+    if( def.has_comment() ) var.set_descr( def.comment() );
+
+    var.address().set_type( reg.iec_address_type() );
+    var.address().set_typevar( reg.iec_address_vartype() );
+    var.address().set_index( reg.iec_address_index() );
+    var.address().set_subindex( reg.index() );
+
+    vars.push_back( var );
+}
+
+
+//---------------------------------------------------------------------------
+void export_constant(const DefineBuf& def, std::vector<plcb::Variable>& consts)
+{
+    plcb::Variable var;
+
+    var.set_name( def.label() );
+    var.set_type( def.comment_predecl() );
+
+    var.set_value( def.value() );
+    if( def.has_comment() ) var.set_descr( def.comment() );
+
+    consts.push_back( var );
+}
+
+
+//---------------------------------------------------------------------------
 // Parse a Sipro h file
-void parse(const std::string_view buf, plcb::Library& lib, std::vector<std::string>& issues, const bool fussy)
+void parse(const std::string& file_path, const std::string_view buf, plcb::Library& lib, std::vector<std::string>& issues, const bool fussy)
 {
     // Prepare the library containers for header data
-    lib.global_variables().groups().emplace_back();
-    lib.global_variables().groups().back().set_name("Header_Variables");
-    lib.global_constants().groups().emplace_back();
-    lib.global_constants().groups().back().set_name("Header_Constants");
+    auto& vars = lib.global_variables().groups().emplace_back();
+    vars.set_name("Header_Variables");
+    auto& consts = lib.global_constants().groups().emplace_back();
+    consts.set_name("Header_Constants");
 
-    Parser parser(buf, issues, fussy);
-    while( const DefineBuf def = parser.next_define() )
-       {
-        //DBGLOG("Define - label=\"{}\" value=\"{}\" comment=\"{}\" predecl=\"{}\"\n", def.label(), def.value(), str::iso_latin1_to_utf8(def.comment()), def.comment_predecl())
+    Parser parser(file_path, buf, issues, fussy);
 
-        // Must export these:
-        //
-        // Sipro registers
-        // vnName     vn1782  // descr
-        //             ↑ Sipro register
-        //
-        // Numeric constants
-        // LABEL     123       // [INT] Descr
-        //            ↑ Value       ↑ IEC61131-3 type
-
-        // Check if it's a Sipro register
-        if( const sipro::Register reg(def.value());
-            reg.is_valid() )
+    try{
+        while( const DefineBuf def = parser.next_define() )
            {
-            plcb::Variable var;
+            //DBGLOG("Define - label=\"{}\" value=\"{}\" comment=\"{}\" predecl=\"{}\"\n", def.label(), def.value(), str::iso_latin1_to_utf8(def.comment()), def.comment_predecl())
 
-            var.set_name( def.label() );
-            var.set_type( reg.iec_type() );
-            if( reg.is_va() ) var.set_length( reg.get_va_length() );
-            if( def.has_comment() ) var.set_descr( def.comment() );
+            // Must export these:
+            //
+            // Sipro registers
+            // vnName     vn1782  // descr
+            //             ↑ Sipro register
+            //
+            // Numeric constants
+            // LABEL     123       // [INT] Descr
+            //            ↑ Value       ↑ IEC61131-3 type
 
-            var.address().set_type( reg.iec_address_type() );
-            var.address().set_typevar( reg.iec_address_vartype() );
-            var.address().set_index( reg.iec_address_index() );
-            var.address().set_subindex( reg.index() );
-
-            lib.global_variables().groups().back().variables().push_back( var );
-           }
-
-        // Check if it's a numeric constant to be exported
-        else if( def.value_is_number() )
-           {
-            // Must be exported to PLC?
-            if( plc::is_num_type(def.comment_predecl()) )
+            // Check if it's a Sipro register
+            if( const sipro::Register reg(def.value());
+                reg.is_valid() )
                {
-                plcb::Variable var;
-
-                var.set_name( def.label() );
-                var.set_type( def.comment_predecl() );
-
-                var.set_value( def.value() );
-                if( def.has_comment() ) var.set_descr( def.comment() );
-
-                lib.global_constants().groups().back().variables().push_back( var );
+                export_register(reg, def, vars.variables());
                }
-            //else
+
+            // Check if it's a numeric constant to be exported
+            else if( def.value_is_number() )
+               {
+                // Must be exported to PLC?
+                if( plc::is_num_type(def.comment_predecl()) )
+                   {
+                    export_constant(def, consts.variables());
+                   }
+                //else
+                //   {
+                //    issues.push_back(fmt::format("{} value not exported: {}={} ({})", def.comment_predecl(), def.label(), def.value()));
+                //   }
+               }
+
+            //else if( superfussy )
             //   {
-            //    issues.push_back(fmt::format("{} value not exported: {}={} ({})", def.comment_predecl(), def.label(), def.value()));
+            //    issues.push_back(fmt::format("Define not exported: {}={}"sv, def.label(), def.value()));
             //   }
            }
-
-        //else if( superfussy )
-        //   {
-        //    issues.push_back(fmt::format("Define not exported: {}={}"sv, def.label(), def.value()));
-        //   }
+       }
+    catch(parse_error&)
+       {
+        throw;
+       }
+    catch(std::exception& e)
+       {
+        throw parser.create_parse_error(e.what());
        }
 
-    if( lib.global_variables().groups().back().variables().empty() &&
-        lib.global_constants().groups().back().variables().empty() )
+
+    if( vars.variables().empty() && consts.variables().empty() )
        {
         if(fussy) throw std::runtime_error("No exportable defines found");
         else issues.push_back("No exportable defines found");

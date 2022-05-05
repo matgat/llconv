@@ -18,10 +18,10 @@
 #include <string_view>
 #include <stdexcept> // std::exception, std::runtime_error, ...
 #include <charconv> // std::from_chars
+//#include <algorithm> // std::min
 #include <fmt/core.h> // fmt::format
 
 #include "string-utilities.hpp" // str::escape
-#include "format_string.hpp" // fmtstr::parse_error
 #include "debug.hpp" // DBGLOG
 
 using namespace std::literals; // "..."sv
@@ -29,9 +29,38 @@ using namespace std::literals; // "..."sv
 
 
 /////////////////////////////////////////////////////////////////////////////
+class parse_error final : public std::exception
+{
+ public:
+    explicit parse_error(const std::string_view msg,
+                         const std::string_view pth,
+                         const std::size_t lin,
+                         const std::size_t off) noexcept
+       : i_msg(fmt::format("{} ({}:{})",msg,pth,lin))
+       , i_filepath(pth)
+       , i_line(lin)
+       , i_pos(off) {}
+
+    const char* what() const noexcept override { return i_msg.c_str(); } // Could rise a '-Wweak-vtables'
+
+    const std::string& file_path() const noexcept { return i_filepath; }
+    std::size_t line() const noexcept { return i_line; }
+    std::size_t pos() const noexcept { return i_pos; }
+
+ private:
+    std::string i_msg;
+    std::string i_filepath;
+    std::size_t i_line, // Line
+                i_pos; // Character offset
+};
+
+
+
+/////////////////////////////////////////////////////////////////////////////
 class BasicParser
 {
  protected:
+    const std::string file_path;
     const char* const buf;
     const std::size_t siz; // buffer size
     const std::size_t i_last; // index of the last character
@@ -41,14 +70,18 @@ class BasicParser
     const bool fussy;
 
  public:
-    BasicParser(const std::string_view b, std::vector<std::string>& sl, const bool f)
-      : buf(b.data())
-      , siz(b.size())
+    BasicParser(const std::string& pth,
+                const std::string_view dat,
+                std::vector<std::string>& lst,
+                const bool fus)
+      : file_path(pth)
+      , buf(dat.data())
+      , siz(dat.size())
       , i_last(siz-1u) // siz>0
       , line(1)
       , i(0)
-      , issues(sl)
-      , fussy(f)
+      , issues(lst)
+      , fussy(fus)
        {
         // Check possible BOM    |  Encoding    |   Bytes     | Chars |
         //                       |--------------|-------------|-------|
@@ -71,30 +104,49 @@ class BasicParser
         //if(buf.find('\r') != buf.npos) throw std::runtime_error("Use unix EOL, remove CR (\\r) characters");
        }
 
+    BasicParser(const BasicParser&) = delete; // Prevent copy
+    BasicParser(BasicParser&&) = delete; // Prevent move
+    BasicParser& operator=(const BasicParser&) = delete; // Prevent copy assignment
+    BasicParser& operator=(BasicParser&&) = delete; // Prevent move assignment
+    ~BasicParser() = default; // Yes, destructor is not virtual
+
+
     //-----------------------------------------------------------------------
     [[nodiscard]] bool end_not_reached() const noexcept { return i<siz; }
     [[nodiscard]] std::size_t curr_line() const noexcept { return line; }
     [[nodiscard]] std::size_t curr_pos() const noexcept { return i; }
 
 
- protected:
+    //-----------------------------------------------------------------------
+    parse_error create_parse_error(const std::string_view msg) const noexcept
+       {
+        return parse_error(msg, file_path, line, i<=i_last ? i : i_last);
+       }
+
+    //-----------------------------------------------------------------------
+    parse_error create_parse_error(const std::string_view msg, const std::size_t lin, const std::size_t off) const noexcept
+       {
+        return parse_error(msg, file_path, lin, off<=i_last ? off : i_last);
+       }
+
     //-----------------------------------------------------------------------
     //template<typename ...Args> void notify_error(const std::string_view msg, Args&&... args) const
     //   {
     //    // Unfortunately this generates error: "call to immediate function is not a constant expression"
-    //    //if(fussy) throw std::runtime_error( fmt::format(msg, args...) );
+    //    //if(fussy) throw create_parse_error( fmt::format(msg, args...) );
     //    //else issues.push_back( fmt::format("{} (line {}, offset {})"sv, fmt::format(msg, args...), line, i) );
-    //    if(fussy) throw std::runtime_error( fmt::format(fmt::runtime(msg), args...) );
+    //    if(fussy) throw create_parse_error( fmt::format(fmt::runtime(msg), args...) );
     //    else issues.push_back( fmt::format("{} (line {}, offset {})", fmt::format(fmt::runtime(msg), args...), line, i) );
     //   }
     // consteval friendly:
     #define notify_error(...) \
        {\
-        if(fussy) throw std::runtime_error( fmt::format(__VA_ARGS__) );\
+        if(fussy) throw create_parse_error( fmt::format(__VA_ARGS__) );\
         else issues.push_back( fmt::format("{} (line {}, offset {})"sv, fmt::format(__VA_ARGS__), line, i) );\
        }
 
 
+ protected:
     //-----------------------------------------------------------------------
     [[nodiscard]] static bool is_blank(const char c) noexcept
        {
@@ -224,7 +276,7 @@ class BasicParser
        {
         if( i>=siz )
            {
-            throw fmtstr::error("Index not found");
+            throw create_parse_error("Index not found");
            }
 
         if( buf[i]=='+' )
@@ -232,16 +284,16 @@ class BasicParser
             ++i;
             if( i>=siz )
                {
-                throw fmtstr::error("Invalid index \'+\'");
+                throw create_parse_error("Invalid index \'+\'");
                }
            }
         else if( buf[i]=='-' )
            {
-            throw fmtstr::error("Negative index");
+            throw create_parse_error("Negative index");
            }
         if( !std::isdigit(buf[i]) )
            {
-            throw fmtstr::error("Invalid char \'{}\' in index", buf[i]);
+            throw create_parse_error(fmt::format("Invalid char \'{}\' in index", buf[i]));
            }
         std::size_t result = (buf[i]-'0');
         const std::size_t base = 10u;
@@ -259,7 +311,7 @@ class BasicParser
        {
         if( i>=siz )
            {
-            throw fmtstr::error("No integer found");
+            throw create_parse_error("No integer found");
            }
         int sign = 1;
         if( buf[i]=='+' )
@@ -268,7 +320,7 @@ class BasicParser
             ++i;
             if( i>=siz )
                {
-                throw fmtstr::error("Invalid integer \'+\'");
+                throw create_parse_error("Invalid integer \'+\'");
                }
            }
         else if( buf[i]=='-' )
@@ -277,12 +329,12 @@ class BasicParser
             ++i;
             if( i>=siz )
                {
-                throw fmtstr::error("Invalid integer \'-\'");
+                throw create_parse_error("Invalid integer \'-\'");
                }
            }
         if( !std::isdigit(buf[i]) )
            {
-            throw fmtstr::error("Invalid char \'{}\' in integer", buf[i]);
+            throw create_parse_error(fmt::format("Invalid char \'{}\' in integer", buf[i]));
            }
         int result = (buf[i]-'0');
         const int base = 10;
@@ -356,7 +408,7 @@ class BasicParser
     //       }
     //    if( found_expchar && !found_expval )
     //         {
-    //          throw fmtstr::error("Invalid floating point number: No exponent value"); // ex "123E"
+    //          throw create_parse_error("Invalid floating point number: No exponent value"); // ex "123E"
     //         }
     //
     //    // [calculate result]
@@ -371,7 +423,7 @@ class BasicParser
     //       }
     //    else
     //       {
-    //        throw fmtstr::error("Invalid floating point number");
+    //        throw create_parse_error("Invalid floating point number");
     //        //if(found_expchar) result = 1.0; // things like 'E,+E,-exp,exp+,E-,...'
     //        //else result = std::numeric_limits<double>::quiet_NaN(); // things like '+,-,,...'
     //       }
@@ -393,7 +445,7 @@ class BasicParser
     //        else if( buf[i]=='\n' ) ++line;
     //        ++i;
     //       }
-    //    throw fmtstr::error("Unclosed content (\'{}\' expected)", str::escape(c));
+    //    throw create_parse_error(fmt::format("Unclosed content (\'{}\' expected)", str::escape(c)));
     //   }
 
 
@@ -411,7 +463,7 @@ class BasicParser
     //        else if( buf[i]=='\n' ) break;
     //        ++i;
     //       }
-    //    throw fmtstr::error("Unclosed content (\'{}\' expected)", str::escape(c));
+    //    throw create_parse_error(fmt::format("Unclosed content (\'{}\' expected)", str::escape(c)));
     //   }
 
 
@@ -439,7 +491,7 @@ class BasicParser
                 else ++i;
                }
            }
-        throw fmtstr::parse_error(fmt::format("Unclosed content (\'{}\' expected)", str::escape(c)), line_start, i_start);
+        throw create_parse_error(fmt::format("Unclosed content (\'{}\' expected)", str::escape(c)), line_start, i_start);
        }
 
 
@@ -457,7 +509,7 @@ class BasicParser
     //        else if( buf[i]=='\n' ) ++line;
     //        ++i;
     //       }
-    //    throw fmtstr::parse_error(fmt::format("Unclosed content (\"{}\" expected)",tok), line_start, i_start);
+    //    throw create_parse_error(fmt::format("Unclosed content (\"{}\" expected)",tok), line_start, i_start);
     //   }
 
 
@@ -480,7 +532,7 @@ class BasicParser
                }
             else ++i;
            }
-        throw fmtstr::parse_error(fmt::format("Unclosed content (\"{}\" expected)",tok), line_start, i_start);
+        throw create_parse_error(fmt::format("Unclosed content (\"{}\" expected)",tok), line_start, i_start);
        }
 
 
@@ -526,7 +578,7 @@ class BasicParser
     //           }
     //        ++i;
     //       }
-    //    throw fmtstr::parse_error(fmt::format("Unclosed block (\"{}{}\" expected)",c1,c2), line_start, i_start);
+    //    throw create_parse_error(fmt::format("Unclosed block (\"{}{}\" expected)",c1,c2), line_start, i_start);
     //   }
 };
 
