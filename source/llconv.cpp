@@ -11,6 +11,8 @@
 #include <iostream>
 #include <string>
 #include <string_view>
+//#include <span>
+//#include <ranges>
 #include <vector>
 #include <stdexcept> // std::runtime_error
 #include <fmt/core.h> // fmt::format
@@ -34,11 +36,10 @@ using namespace std::literals; // "..."sv
 class Arguments final
 {
  public:
-    Arguments(int argc, const char* argv[])
+    Arguments(const int argc, const char* const argv[]) // const std::span args
        {
-        //std::vector<std::string> args(argv+1, argv+argc); for( std::string& arg : args )
         // Expecting pll file paths
-        i_files.reserve( static_cast<std::size_t>(argc) );
+        i_files.reserve( static_cast<std::size_t>(argc) ); // args.size()
         try{
             enum class STS
                {
@@ -47,6 +48,7 @@ class Arguments final
                 GET_OUT
                } status = STS::SEE_ARG;
 
+            //for( const auto arg : args | std::views::transform([](const char* const a){ return std::string_view(a);}) )
             for( int i=1; i<argc; ++i )
                {
                 const std::string_view arg{ argv[i] };
@@ -162,14 +164,14 @@ class Arguments final
                      "\n";
        }
 
-    const auto& files() const noexcept { return i_files; }
-    const auto& output() const noexcept { return i_output; }
-    bool output_isdir() const noexcept { return i_output_isdir; }
-    bool output_isdefault() const noexcept { return i_output==i_default_output; }
-    bool fussy() const noexcept { return i_fussy; }
-    bool verbose() const noexcept { return i_verbose; }
-    bool clear() const noexcept { return i_clear; }
-    const str::keyvals& options() const noexcept { return i_options; }
+    [[nodiscard]] const auto& files() const noexcept { return i_files; }
+    [[nodiscard]] const auto& output() const noexcept { return i_output; }
+    [[nodiscard]] bool output_isdir() const noexcept { return i_output_isdir; }
+    [[nodiscard]] bool output_isdefault() const noexcept { return i_output==i_default_output; }
+    [[nodiscard]] bool fussy() const noexcept { return i_fussy; }
+    [[nodiscard]] bool verbose() const noexcept { return i_verbose; }
+    [[nodiscard]] bool clear() const noexcept { return i_clear; }
+    [[nodiscard]] const str::keyvals& options() const noexcept { return i_options; }
 
 
  private:
@@ -183,6 +185,32 @@ class Arguments final
     str::keyvals i_options; // Conversion and writing options
 };
 
+
+
+//---------------------------------------------------------------------------
+// Clear generated files (log,pll,plclib) from output directory
+void clear_output_files(const Arguments& args, std::vector<std::string>& issues)
+{
+    const auto removed_count = sys::remove_files_inside(args.output(), std::regex{R"-(^.*\.(?:log|pll|plclib)$)-"});
+    if( args.verbose() )
+       {
+        std::cout << "Cleared " << removed_count << " files in " << args.output().string() << '\n';
+       }
+
+    // Output directory should be normally empty (except dot files like ".gitignore")
+    // Notify the presence of uncleared files
+    if( !fs::is_empty(args.output()) )
+       {
+        //issues.push_back("Output directory contains uncleared files");
+        for( const auto& elem : fs::directory_iterator(args.output()) )
+           {
+            if( !elem.path().filename().string().starts_with('.') )
+               {
+                issues.push_back(fmt::format("Uncleared file in output dir: {}", elem.path().string()));
+               }
+           }
+       }
+}
 
 
 //---------------------------------------------------------------------------
@@ -239,13 +267,17 @@ template<typename F> void parse_buffer(F parsefunct, const std::string_view buf,
 
 }
 
+
 //---------------------------------------------------------------------------
 // Write PLC library to plclib format
 void write_plclib(const plcb::Library& lib, const std::string& pth, const Arguments& args)
 {
     //if( args.output_isdir() )
     //   {
-        if(args.verbose()) std::cout << "    " "Writing to: "  << pth << '\n';
+        if( args.verbose() )
+           {
+            std::cout << "    " "Writing to: "  << pth << '\n';
+           }
         sys::file_write out_file_write(pth);
         plclib::write(out_file_write, lib, args.options());
     //   }
@@ -255,13 +287,17 @@ void write_plclib(const plcb::Library& lib, const std::string& pth, const Argume
     //   }
 }
 
+
 //---------------------------------------------------------------------------
 // Write PLC library to pll format
 void write_pll(const plcb::Library& lib, const std::string& pth, const Arguments& args)
 {
     //if( args.output_isdir() )
     //   {
-        if(args.verbose()) std::cout << "    " "Writing to: "  << pth << '\n';
+        if( args.verbose() )
+           {
+            std::cout << "    " "Writing to: "  << pth << '\n';
+           }
         sys::file_write out_file_write(pth);
         pll::write(out_file_write, lib, args.options());
     //   }
@@ -295,12 +331,12 @@ void test_pll(const std::string& fbasename, const plcb::Library& lib, const Argu
 
 
 //---------------------------------------------------------------------------
-int main( int argc, const char* argv[] )
+int main( const int argc, const char* const argv[] )
 {
     std::ios_base::sync_with_stdio(false); // Better performance
 
     try{
-        Arguments args(argc, argv);
+        Arguments args(argc, argv); // std::span(argv, argc)
         std::vector<std::string> issues;
 
         if( args.verbose() )
@@ -318,82 +354,68 @@ int main( int argc, const char* argv[] )
            {
             if( args.output_isdefault() )
                {
-                if( args.verbose() )
-                   {
-                    std::cout << "Won't clear files in default output folder\n";
-                   }
+                issues.push_back("Won't clear files in default output folder");
                }
             else
                {
-                const auto removed_count = sys::remove_files_inside(args.output(), std::regex{R"-(^.*\.(?:log|pll|plclib)$)-"});
-                if( args.verbose() )
-                   {
-                    std::cout << "Cleared " << removed_count << " files in " << args.output().string() << '\n';
-                   }
-                // Check uncleared files
-                // Nota: nella directory di sviluppo posso avere ".gitignore"
-                if( !fs::is_empty(args.output()) )
-                   {
-                    //issues.push_back("Output directory contains uncleared files");
-                    for( const auto& elem : fs::directory_iterator(args.output()) )
-                       {
-                        if( !elem.path().filename().string().starts_with('.') )
-                           {
-                            issues.push_back(fmt::format("Uncleared file in output dir: {}", elem.path().string()));
-                           }
-                       }
-                   }
+                clear_output_files(args, issues);
                }
            }
 
-        for( const auto& pth : args.files() )
+        for( const auto& file_path_obj : args.files() )
            {
             // Prepare the file buffer
             // Note: Extension not recognized is an exceptional case,
             //       so there's nor arm to confidently open the file
-            const std::string str_pth{pth.string()};
-            const sys::MemoryMappedFile file_buf(str_pth); // Do not deallocate until the very end!
+            const std::string file_fullpath{ file_path_obj.string() };
+            const sys::MemoryMappedFile file_buf(file_fullpath); // Do not deallocate until the very end!
 
             // Show file name and size
             if( args.verbose() )
                {
-                std::cout << "\nProcessing " << str_pth;
+                std::cout << "\nProcessing " << file_fullpath;
                 std::cout << " (size: ";
                 if(file_buf.size()>1048576) std::cout << file_buf.size()/1048576 << "MB)\n";
                 else if(file_buf.size()>1024) std::cout << file_buf.size()/1024 << "KB)\n";
                 else std::cout << file_buf.size() << "B)\n";
                }
 
-            const std::string fbasename = pth.stem().string();
-            plcb::Library lib( fbasename ); // This will refer to 'file_buf'!
+            const std::string file_basename{ file_path_obj.stem().string() };
+            plcb::Library lib( file_basename ); // This will refer to 'file_buf'!
 
             // Recognize by file extension
-            const std::string ext {str::tolower(pth.extension().string())};
-            if( ext == ".pll" )
+            const std::string file_ext{ str::tolower(file_path_obj.extension().string()) };
+            if( file_ext == ".pll" )
                {// pll -> plclib
-                parse_buffer(pll::parse, file_buf.as_string_view(), pth, str_pth, lib, args, issues);
+                parse_buffer(pll::parse, file_buf.as_string_view(), file_path_obj, file_fullpath, lib, args, issues);
               #ifdef PLL_TEST
-                test_pll(fbasename, lib, args, issues);
+                test_pll(file_basename, lib, args, issues);
               #else
-                const fs::path out_plclib_pth{ args.output() / fmt::format("{}.plclib", fbasename) };
+                const fs::path out_plclib_pth{ args.output() / fmt::format("{}.plclib", file_basename) };
                 write_plclib(lib, out_plclib_pth.string(), args);
               #endif
                }
-            else if( ext == ".h" )
+            else if( file_ext == ".h" )
                {// h -> pll,plclib
-                parse_buffer(h::parse, file_buf.as_string_view(), pth, str_pth, lib, args, issues);
+                parse_buffer(h::parse, file_buf.as_string_view(), file_path_obj, file_fullpath, lib, args, issues);
 
-                const fs::path out_pll_pth{ args.output() / fmt::format("{}.pll", fbasename) };
+                const fs::path out_pll_pth{ args.output() / fmt::format("{}.pll", file_basename) };
                 write_pll(lib, out_pll_pth.string(), args);
 
-                const fs::path out_plclib_pth{ args.output() / fmt::format("{}.plclib", fbasename) };
+                const fs::path out_plclib_pth{ args.output() / fmt::format("{}.plclib", file_basename) };
                 write_plclib(lib, out_plclib_pth.string(), args);
                }
             else
                {
-                const std::string msg = fmt::format("Unhandled extension {} of {}"sv, ext, pth.filename().string());
-                if(args.fussy()) throw std::runtime_error(msg);
-                else issues.push_back(msg);
+                const std::string msg{ fmt::format("Unhandled extension {} of {}"sv, file_ext, file_path_obj.filename().string()) };
+                if( args.fussy() )
+                   {
+                    throw std::runtime_error(msg);
+                   }
+                else
+                   {
+                    issues.push_back(msg);
+                   }
                }
            }
 
@@ -410,13 +432,13 @@ int main( int argc, const char* argv[] )
         return 0;
        }
 
-    catch(std::invalid_argument& e)
+    catch( std::invalid_argument& e )
        {
         std::cerr << "!! " << e.what() << '\n';
         Arguments::print_usage();
        }
 
-    catch(std::exception& e)
+    catch( std::exception& e )
        {
         std::cerr << "!! Error: " << e.what() << '\n';
        }
