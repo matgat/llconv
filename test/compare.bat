@@ -9,7 +9,7 @@ set llconv_args=-fussy -clear
 set out_dir=D:\HD\Desktop
 set h_sources=%UserProfile%\Macotec\Machines\m32-Strato\sde\PROG\*.h
 set pll_sources=%UserProfile%\Macotec\Machines\m32-Strato\sde\PLC\*.pll
-set wmerge="%ProgramFiles%\WinMerge\WinMergeU.exe" /e /u
+set wmerge="%ProgramFiles%\WinMerge\WinMergeU.exe" /e /u /f *.*
 
 set out_dir_pre=%out_dir%\pre
 set out_dir_dev=%out_dir%\dev

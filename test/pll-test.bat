@@ -1,7 +1,7 @@
 @echo off
 rem -----------------------------------------------------------
-rem This will compare the generated file, useful when compiling
-rem with define PLL_TEST
+rem Compare the generated file
+rem Useful when compiling with define PLL_TEST
 rem -----------------------------------------------------------
 set llconv="..\msvc\x64-Debug\llconv.exe"
 set fname=test
